@@ -19,8 +19,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "prepare": "husky install"
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
@@ -92,7 +91,7 @@
     "typescript": "^5.7.2"
   },
   "engines": {
-    "node": ">=18.18.0",
+    "node": "20.x",
     "npm": ">=9.0.0"
   },
   "lint-staged": {
