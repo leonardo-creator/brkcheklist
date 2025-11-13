@@ -1,15 +1,5 @@
 import Link from 'next/link';
 
-export const metadata = {
-  title: 'Página não encontrada · BRK Checklist',
-  description:
-    'A página solicitada não foi localizada. Volte para o dashboard ou escolha outra seção do sistema.',
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
-
 export default function NotFound() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-900">
