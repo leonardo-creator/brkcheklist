@@ -16,6 +16,6 @@ export default async function Home() {
     redirect('/pending-approval');
   }
 
-  // Todos os usuários aprovados (ADMIN, OPERATOR, VIEWER) vão para /dashboard
+  // Todos os usuários aprovados (ADMIN, USER) vão para /dashboard
   redirect('/dashboard');
 }
