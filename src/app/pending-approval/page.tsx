@@ -2,6 +2,9 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
+// Força renderização dinâmica
+export const dynamic = 'force-dynamic';
+
 export default async function PendingApprovalPage() {
   const session = await auth();
 
