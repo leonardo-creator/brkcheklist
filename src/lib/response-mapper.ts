@@ -61,6 +61,14 @@ export function mapResponsesToFormData(responses: Array<{
           // Senão, é um enum (YES/NO/NA/PARTIAL)
           (formData.section1 as any)![key] = r.response;
         }
+      } else {
+        // Debug: mostrar questões não mapeadas
+        console.warn('⚠️ Questão não mapeada:', {
+          section: 1,
+          questionNumber: r.questionNumber,
+          questionText: r.questionText,
+          response: r.response,
+        });
       }
     }
 
@@ -293,11 +301,14 @@ function getQuestionKey(
     },
     // Seção 8
     '8': {
-      27: 'q27_fortalecer',
-      28: 'q28_temas',
-      29: 'q29_nomes',
-      30: 'q30_nao_conformidades',
-      31: 'q31_descricao_nc',
+      27: 'q27_equipe_consciente',
+      28: 'q28_fortalecer_realizado',
+      // q28_temas é textValue (condicional)
+      29: 'q29_indicacao_fortalecer',
+      // q29_nomes é textValue (condicional)
+      30: 'q30_paralisacao',
+      31: 'q31_nc_pendentes',
+      // q31_descricao_nc é textValue (condicional)
     },
   };
 
@@ -308,13 +319,16 @@ function getQuestionKey(
   if (questionText.includes('Quais equipamentos')) {
     return 'q14_equipamentos_lista';
   }
-  if (questionText.includes('temas foram abordados')) {
+  if (questionText.includes('Quais máquinas')) {
+    return 'q15_maquinas_lista';
+  }
+  if (questionText.includes('temas foram abordados') || questionText.includes('Quais temas')) {
     return 'q28_temas';
   }
-  if (questionText.includes('nomes dos funcion')) {
+  if (questionText.includes('nomes dos funcion') || questionText.includes('Indicar nomes')) {
     return 'q29_nomes';
   }
-  if (questionText.includes('conformidades pendentes')) {
+  if (questionText.includes('conformidades pendentes') || questionText.includes('Descrever não')) {
     return 'q31_descricao_nc';
   }
 
