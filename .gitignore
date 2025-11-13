@@ -23,6 +23,10 @@ yarn-error.log*
 .env*.local
 .env.production
 
+# Deployment files with secrets
+VERCEL_DEPLOY.md
+VERCEL_ENV_VARS.txt
+
 # IDE
 .vscode/*
 !.vscode/settings.json
