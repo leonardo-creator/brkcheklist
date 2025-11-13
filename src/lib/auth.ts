@@ -1,5 +1,4 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
-import { PrismaAdapter } from '@auth/prisma-adapter';
 import Google from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
@@ -21,25 +20,84 @@ declare module 'next-auth' {
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL!;
 
-// Custom adapter para auto-aprovar admin
+// Custom adapter to handle user creation with admin auto-approval
 const customAdapter = {
-  ...PrismaAdapter(prisma),
-  async createUser(user: { email?: string; name?: string; image?: string; emailVerified?: Date }) {
+  async createUser(user: any) {
+    if (!user.email) {
+      throw new Error('Email is required to create a user');
+    }
+    
     const isAdmin = user.email === ADMIN_EMAIL;
     
     const newUser = await prisma.user.create({
       data: {
         email: user.email,
-        name: user.name,
-        image: user.image,
-        emailVerified: user.emailVerified,
+        name: user.name || null,
+        image: user.image || null,
+        emailVerified: user.emailVerified || null,
         role: isAdmin ? 'ADMIN' : 'PENDING',
         approvedBy: isAdmin ? 'SYSTEM' : null,
         approvedAt: isAdmin ? new Date() : null,
       },
     });
-    
-    return newUser;
+
+    return {
+      id: newUser.id,
+      email: newUser.email,
+      name: newUser.name,
+      image: newUser.image,
+      emailVerified: newUser.emailVerified,
+      role: newUser.role,
+    };
+  },
+
+  async getUser(id: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+    if (!user) return null;
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      image: user.image,
+      emailVerified: user.emailVerified,
+      role: user.role,
+    };
+  },
+
+  async getUserByEmail(email: string) {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+    if (!user) return null;
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      image: user.image,
+      emailVerified: user.emailVerified,
+      role: user.role,
+    };
+  },
+
+  async updateUser(user: any) {
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name: user.name,
+        image: user.image,
+        emailVerified: user.emailVerified,
+      },
+    });
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      image: updatedUser.image,
+      emailVerified: updatedUser.emailVerified,
+      role: updatedUser.role,
+    };
   },
 };
 

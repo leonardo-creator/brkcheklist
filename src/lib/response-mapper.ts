@@ -22,7 +22,7 @@ export function mapResponsesToFormData(responses: Array<{
   sectionNumber?: number | null;
 }>): Partial<InspectionFormData> {
   
-  const formData: InspectionFormData = {};
+  const formData: Partial<InspectionFormData> = {};
 
   // Agrupar respostas por seção
   const responsesBySection = responses.reduce((acc, r) => {
@@ -42,7 +42,7 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 1: Planejamento
   // ===========================
   if (responsesBySection[1]) {
-    formData.section1 = {};
+    formData.section1 = {} as any;
     
     for (const r of responsesBySection[1]) {
       const key = getQuestionKey(1, r.questionNumber, r.questionText);
@@ -50,17 +50,17 @@ export function mapResponsesToFormData(responses: Array<{
       if (key) {
         // Se tem textValue, é um campo de texto
         if (r.textValue) {
-          formData.section1[key] = r.textValue;
+          (formData.section1 as any)![key] = r.textValue;
         } else {
           // Senão, é um enum (YES/NO/NA/PARTIAL)
-          formData.section1[key] = r.response;
+          (formData.section1 as any)![key] = r.response;
         }
       }
     }
 
     // Fotos do PDST
     if (imagesByType.PDST_FRONT && imagesByType.PDST_FRONT.length > 0) {
-      formData.section1.q11_foto_pdst = imagesByType.PDST_FRONT;
+      (formData.section1 as any).q11_foto_pdst = imagesByType.PDST_FRONT;
     }
   }
 
@@ -68,23 +68,23 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 2: Permissão de Trabalho
   // ===========================
   if (responsesBySection[2]) {
-    formData.section2 = {};
+    formData.section2 = {} as any;
     
     for (const r of responsesBySection[2]) {
       const key = getQuestionKey(2, r.questionNumber, r.questionText);
       
       if (key) {
         if (r.textValue) {
-          formData.section2[key] = r.textValue;
+          (formData.section2 as any)![key] = r.textValue;
         } else {
-          formData.section2[key] = r.response;
+          (formData.section2 as any)![key] = r.response;
         }
       }
     }
 
     // Fotos da PT
     if (imagesByType.PT_FRONT && imagesByType.PT_FRONT.length > 0) {
-      formData.section2.q13_foto_pt = imagesByType.PT_FRONT;
+      (formData.section2 as any).q13_foto_pt = imagesByType.PT_FRONT;
     }
   }
 
@@ -92,16 +92,16 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 3: Máquinas e Equipamentos
   // ===========================
   if (responsesBySection[3]) {
-    formData.section3 = {};
+    formData.section3 = {} as any;
     
     for (const r of responsesBySection[3]) {
       const key = getQuestionKey(3, r.questionNumber, r.questionText);
       
       if (key) {
         if (r.textValue) {
-          formData.section3[key] = r.textValue;
+          (formData.section3 as any)![key] = r.textValue;
         } else {
-          formData.section3[key] = r.response;
+          (formData.section3 as any)![key] = r.response;
         }
       }
     }
@@ -111,16 +111,16 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 4: Ferramentas
   // ===========================
   if (responsesBySection[4]) {
-    formData.section4 = {};
+    formData.section4 = {} as any;
     
     for (const r of responsesBySection[4]) {
       const key = getQuestionKey(4, r.questionNumber, r.questionText);
       
       if (key) {
         if (r.textValue) {
-          formData.section4[key] = r.textValue;
+          (formData.section4 as any)![key] = r.textValue;
         } else {
-          formData.section4[key] = r.response;
+          (formData.section4 as any)![key] = r.response;
         }
       }
     }
@@ -130,16 +130,16 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 5: Veículos
   // ===========================
   if (responsesBySection[5]) {
-    formData.section5 = {};
+    formData.section5 = {} as any;
     
     for (const r of responsesBySection[5]) {
       const key = getQuestionKey(5, r.questionNumber, r.questionText);
       
       if (key) {
         if (r.textValue) {
-          formData.section5[key] = r.textValue;
+          (formData.section5 as any)![key] = r.textValue;
         } else {
-          formData.section5[key] = r.response;
+          (formData.section5 as any)![key] = r.response;
         }
       }
     }
@@ -149,16 +149,16 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 6: Instalações
   // ===========================
   if (responsesBySection[6]) {
-    formData.section6 = {};
+    formData.section6 = {} as any;
     
     for (const r of responsesBySection[6]) {
       const key = getQuestionKey(6, r.questionNumber, r.questionText);
       
       if (key) {
         if (r.textValue) {
-          formData.section6[key] = r.textValue;
+          (formData.section6 as any)![key] = r.textValue;
         } else {
-          formData.section6[key] = r.response;
+          (formData.section6 as any)![key] = r.response;
         }
       }
     }
@@ -168,7 +168,7 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 7: Escavações
   // ===========================
   if (responsesBySection[7]) {
-    formData.section7 = {};
+    formData.section7 = {} as any;
     
     for (const r of responsesBySection[7]) {
       const key = getQuestionKey(7, r.questionNumber, r.questionText);
@@ -177,12 +177,12 @@ export function mapResponsesToFormData(responses: Array<{
         if (r.textValue) {
           // q25_profundidade é número
           if (key === 'q25_profundidade') {
-            formData.section7[key] = Number.parseFloat(r.textValue);
+            (formData.section7 as any)![key] = Number.parseFloat(r.textValue);
           } else {
-            formData.section7[key] = r.textValue;
+            (formData.section7 as any)![key] = r.textValue;
           }
         } else {
-          formData.section7[key] = r.response;
+          (formData.section7 as any)![key] = r.response;
         }
       }
     }
@@ -192,16 +192,16 @@ export function mapResponsesToFormData(responses: Array<{
   // SEÇÃO 8: Parecer Final
   // ===========================
   if (responsesBySection[8]) {
-    formData.section8 = {};
+    formData.section8 = {} as any;
     
     for (const r of responsesBySection[8]) {
       const key = getQuestionKey(8, r.questionNumber, r.questionText);
       
       if (key) {
         if (r.textValue) {
-          formData.section8[key] = r.textValue;
+          (formData.section8 as any)![key] = r.textValue;
         } else {
-          formData.section8[key] = r.response;
+          (formData.section8 as any)![key] = r.response;
         }
       }
     }

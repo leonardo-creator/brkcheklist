@@ -37,7 +37,7 @@ export default async function EditInspectionPage({ params }: PageProps) {
 
   // Apenas rascunhos podem ser editados
   if (inspection.status !== 'DRAFT') {
-    redirect(`/inspection/${params.id}`);
+    redirect(`/inspection/${id}`);
   }
 
   // Mapear respostas para o formato do formulário

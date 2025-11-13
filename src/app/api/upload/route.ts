@@ -93,8 +93,7 @@ export async function POST(request: NextRequest) {
       uploadResult = await oneDriveService.uploadLargeFile(
         optimizedBuffer,
         fileName,
-        folderPath,
-        'image/jpeg'
+        folderPath
       );
     } else {
       // Upload simples
