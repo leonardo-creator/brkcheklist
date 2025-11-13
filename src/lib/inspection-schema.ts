@@ -118,6 +118,19 @@ export type InspectionFormData = z.infer<typeof InspectionFormSchema>;
 export type ResponseType = z.infer<typeof ResponseEnum>;
 export type ParecerType = z.infer<typeof ParecerEnum>;
 
+export const InspectionFormDraftSchema = InspectionFormSchema.partial().extend({
+  section1: Section1Schema.partial().optional(),
+  section2: Section2Schema.partial().optional(),
+  section3: Section3Schema.partial().optional(),
+  section4: Section4Schema.partial().optional(),
+  section5: Section5Schema.partial().optional(),
+  section6: Section6Schema.partial().optional(),
+  section7: Section7Schema.partial().optional(),
+  section8: Section8Schema.partial().optional(),
+  section9: Section9Schema.partial().optional(),
+});
+export type InspectionFormDraft = z.infer<typeof InspectionFormDraftSchema>;
+
 // Helper para validar resposta obrigatória
 export const isResponseRequired = (
   questionNumber: string,

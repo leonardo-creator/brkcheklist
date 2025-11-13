@@ -1,7 +1,15 @@
 'use client';
 
 import React from 'react';
-import { Control, Controller, FieldErrors } from 'react-hook-form';
+import {
+  Controller,
+  get,
+  type Control,
+  type FieldError,
+  type FieldErrors,
+  type Path,
+  type UseFormWatch,
+} from 'react-hook-form';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -12,7 +20,7 @@ import type { InspectionFormData } from '@/lib/inspection-schema';
 interface FormSectionProps {
   control: Control<InspectionFormData>;
   errors: FieldErrors<InspectionFormData>;
-  watch: any;
+  watch: UseFormWatch<InspectionFormData>;
 }
 
 // Helper para renderizar campo de resposta YES/NO/NA
@@ -23,50 +31,56 @@ export const ResponseField = ({
   control,
   errors,
 }: {
-  name: any;
+  name: Path<InspectionFormData>;
   label: string;
   required?: boolean;
   control: Control<InspectionFormData>;
   errors: FieldErrors<InspectionFormData>;
-}) => (
-  <div className="space-y-2">
-    <Label>
-      {label}
-      {required && <span className="text-red-500 ml-1">*</span>}
-    </Label>
-    <Controller
-      name={name}
-      control={control}
-      render={({ field }) => (
-        <RadioGroup
-          onValueChange={field.onChange}
-          value={field.value}
-          className="flex gap-4"
-        >
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="YES" id={`${name}-yes`} />
-            <Label htmlFor={`${name}-yes`} className="font-normal cursor-pointer">
-              Sim
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="NO" id={`${name}-no`} />
-            <Label htmlFor={`${name}-no`} className="font-normal cursor-pointer">
-              Não
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="NA" id={`${name}-na`} />
-            <Label htmlFor={`${name}-na`} className="font-normal cursor-pointer">
-              N/A
-            </Label>
-          </div>
-        </RadioGroup>
+}) => {
+  const fieldError = get(errors, name) as FieldError | undefined;
+
+  return (
+    <div className="space-y-2">
+      <Label>
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </Label>
+      <Controller
+        name={name}
+        control={control}
+        render={({ field }) => (
+          <RadioGroup
+            onValueChange={field.onChange}
+            value={typeof field.value === 'string' ? field.value : ''}
+            className="flex gap-4"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="YES" id={`${name}-yes`} />
+              <Label htmlFor={`${name}-yes`} className="font-normal cursor-pointer">
+                Sim
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="NO" id={`${name}-no`} />
+              <Label htmlFor={`${name}-no`} className="font-normal cursor-pointer">
+                Não
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="NA" id={`${name}-na`} />
+              <Label htmlFor={`${name}-na`} className="font-normal cursor-pointer">
+                N/A
+              </Label>
+            </div>
+          </RadioGroup>
+        )}
+      />
+      {fieldError?.message && (
+        <p className="text-sm text-red-500">{fieldError.message}</p>
       )}
-    />
-    {errors && <p className="text-sm text-red-500">{(errors as any)[name]?.message}</p>}
-  </div>
-);
+    </div>
+  );
+};
 
 // Seção 3: Máquinas e Equipamentos Manuais
 export const Section3 = ({ control, errors, watch }: FormSectionProps) => {

@@ -10,7 +10,13 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useForm, Controller } from 'react-hook-form';
+import {
+  useForm,
+  Controller,
+  get,
+  type FieldError,
+  type Path,
+} from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   InspectionFormSchema,
@@ -48,9 +54,9 @@ const SECTION_TITLES = [
 ];
 
 interface InspectionFormProps {
-  inspectionId?: string;
-  initialData?: Partial<InspectionFormData>;
-  mode?: 'create' | 'edit';
+  readonly inspectionId?: string;
+  readonly initialData?: Partial<InspectionFormData>;
+  readonly mode?: 'create' | 'edit';
 }
 
 export function InspectionForm({
@@ -139,7 +145,7 @@ export function InspectionForm({
       
       // Se criou nova inspeção, atualizar o ID
       if (!inspectionId && result.id) {
-        window.history.replaceState(
+        globalThis.history.replaceState(
           null,
           '',
           `/inspection/${result.id}/edit`
@@ -159,16 +165,8 @@ export function InspectionForm({
     try {
       // Pegar dados atuais do formulário SEM validação
       const formData = watch();
-      console.log('💾 Salvando rascunho:', {
-        inspectionId,
-        mode,
-        hasTitle: !!formData.title,
-        hasLocation: !!formData.location,
-        sections: Object.keys(formData).filter(k => k.startsWith('section'))
-      });
-      
-      const result = await saveDraft(formData);
-      console.log('✅ Rascunho salvo com sucesso:', result);
+
+      await saveDraft(formData);
       alert('Rascunho salvo com sucesso!');
       router.push('/dashboard');
     } catch (error) {
@@ -211,60 +209,66 @@ export function InspectionForm({
   const nextSection = () => {
     if (currentSection < SECTION_TITLES.length - 1) {
       setCurrentSection(currentSection + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      globalThis.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const prevSection = () => {
     if (currentSection > 0) {
       setCurrentSection(currentSection - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      globalThis.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
-  const renderResponseField = (name: any, label: string, required = true) => (
-    <div className="space-y-2">
-      <Label>
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </Label>
-      <Controller
-        name={name}
-        control={control}
-        render={({ field }) => (
-          <RadioGroup
-            onValueChange={field.onChange}
-            value={field.value}
-            className="flex gap-4"
-          >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="YES" id={`${name}-yes`} />
-              <Label htmlFor={`${name}-yes`} className="font-normal">
-                Sim
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="NO" id={`${name}-no`} />
-              <Label htmlFor={`${name}-no`} className="font-normal">
-                Não
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="NA" id={`${name}-na`} />
-              <Label htmlFor={`${name}-na`} className="font-normal">
-                N/A
-              </Label>
-            </div>
-          </RadioGroup>
+  const renderResponseField = (
+    name: Path<InspectionFormData>,
+    label: string,
+    required = true
+  ) => {
+    const fieldError = get(errors, name) as FieldError | undefined;
+
+    return (
+      <div className="space-y-2">
+        <Label>
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </Label>
+        <Controller
+          name={name}
+          control={control}
+          render={({ field }) => (
+            <RadioGroup
+              onValueChange={field.onChange}
+              value={typeof field.value === 'string' ? field.value : ''}
+              className="flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="YES" id={`${name}-yes`} />
+                <Label htmlFor={`${name}-yes`} className="font-normal">
+                  Sim
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="NO" id={`${name}-no`} />
+                <Label htmlFor={`${name}-no`} className="font-normal">
+                  Não
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="NA" id={`${name}-na`} />
+                <Label htmlFor={`${name}-na`} className="font-normal">
+                  N/A
+                </Label>
+              </div>
+            </RadioGroup>
+          )}
+        />
+        {fieldError?.message && (
+          <p className="text-sm text-red-500">{fieldError.message}</p>
         )}
-      />
-      {errors && (
-        <p className="text-sm text-red-500">
-          {(errors as any)[name]?.message}
-        </p>
-      )}
-    </div>
-  );
+      </div>
+    );
+  };
 
   return (
     <div className="container mx-auto max-w-4xl py-8 px-4">

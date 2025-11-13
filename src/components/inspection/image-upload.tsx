@@ -1,17 +1,21 @@
 'use client';
 
-import React, { useState, useRef, ChangeEvent } from 'react';
-import { compressImage } from '@/lib/image-utils';
-import { Button } from '@/components/ui/button';
+import React, { useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
+import Image from 'next/image';
 import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { compressImage } from '@/lib/image-utils';
+import { getErrorMessage } from '@/lib/utils';
+
 interface ImageUploadProps {
-  value: string[];
-  onChange: (urls: string[]) => void;
-  maxImages?: number; // Opcional, sem limite por padrão
-  required?: boolean;
-  label?: string;
-  helpText?: string;
+  readonly value?: string[];
+  readonly onChange: (urls: string[]) => void;
+  readonly maxImages?: number;
+  readonly required?: boolean;
+  readonly label?: string;
+  readonly helpText?: string;
 }
 
 interface ImagePreview {
@@ -21,164 +25,211 @@ interface ImagePreview {
   error?: string;
 }
 
+const IMAGE_FALLBACK_MESSAGE = 'Erro ao carregar imagem';
+
+const updatePreviewArray = (
+  previews: ImagePreview[],
+  index: number,
+  updater: (preview: ImagePreview) => ImagePreview
+): ImagePreview[] =>
+  previews.map((preview, currentIndex) =>
+    currentIndex === index ? updater(preview) : preview
+  );
+
 export function ImageUpload({
   value = [],
   onChange,
-  maxImages, // Sem limite por padrão
+  maxImages,
   required = false,
   label = 'Upload de Imagens',
   helpText,
 }: ImageUploadProps) {
   const [previews, setPreviews] = useState<ImagePreview[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [failedPersistedImages, setFailedPersistedImages] = useState<Record<string, boolean>>({});
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
+  const totalSelected = value.length + previews.length;
 
-    // Verificar limite de imagens (se definido)
-    if (maxImages && value.length + files.length > maxImages) {
-      alert(`Máximo de ${maxImages} imagens permitidas`);
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const markPreview = (index: number, updater: (preview: ImagePreview) => ImagePreview) => {
+    setPreviews((prev) => updatePreviewArray(prev, index, updater));
+  };
+
+  const handlePreviewImageError = (index: number, message?: string) => {
+    markPreview(index, (preview) => ({
+      ...preview,
+      uploading: false,
+      error: message ?? IMAGE_FALLBACK_MESSAGE,
+    }));
+  };
+
+  const markPersistedImageFailed = (url: string) => {
+    setFailedPersistedImages((prev) => ({ ...prev, [url]: true }));
+  };
+
+  const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) {
       return;
     }
 
-    setUploading(true);
+    if (maxImages && totalSelected + files.length > maxImages) {
+      alert(`Máximo de ${maxImages} imagens permitidas`);
+      resetFileInput();
+      return;
+    }
+
+    setIsUploading(true);
+
+    const objectUrls: string[] = [];
 
     try {
-      // Criar previews iniciais
-      const newPreviews: ImagePreview[] = files.map((file) => ({
-        url: URL.createObjectURL(file),
-        name: file.name,
-        uploading: true,
-      }));
+      const basePreviewIndex = previews.length;
+      const newPreviews: ImagePreview[] = files.map((file) => {
+        const url = URL.createObjectURL(file);
+        objectUrls.push(url);
+        return {
+          url,
+          name: file.name,
+          uploading: true,
+        };
+      });
 
       setPreviews((prev) => [...prev, ...newPreviews]);
 
-      // Upload de cada arquivo
-      const uploadPromises = files.map(async (file, index) => {
+      const uploadFile = async (
+        file: File,
+        previewIndex: number
+      ): Promise<string | null> => {
         try {
-          // Comprimir imagem
-          const result = await compressImage(file, {
+          const { compressedFile } = await compressImage(file, {
             maxSizeMB: 1,
             maxWidthOrHeight: 1920,
           });
 
-          // Preparar FormData
           const formData = new FormData();
-          formData.append('file', result.compressedFile);
+          formData.append('file', compressedFile);
 
-          // Upload para API
           const response = await fetch('/api/upload', {
             method: 'POST',
             body: formData,
           });
 
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            
-            // Se for erro de OneDrive não conectado, mostrar alerta especial
+            const errorData: { error?: string; action?: string; connectUrl?: string } = await response
+              .json()
+              .catch(() => ({}));
+
             if (errorData.action === 'connect_onedrive') {
               alert(
                 '⚠️ OneDrive não conectado!\n\n' +
-                'Você precisa conectar sua conta Microsoft para fazer upload de imagens.\n\n' +
-                'Clique em OK para conectar agora.'
+                  'Você precisa conectar sua conta Microsoft para fazer upload de imagens.\n\n' +
+                  'Clique em OK para conectar agora.'
               );
-              window.location.href = errorData.connectUrl || '/api/onedrive/login';
-              throw new Error('OneDrive não conectado');
+              const redirectUrl = errorData.connectUrl ?? '/api/onedrive/login';
+              globalThis.location.href = redirectUrl;
+              handlePreviewImageError(previewIndex, 'OneDrive não conectado');
+              return null;
             }
-            
-            const errorMsg = errorData.error || `Erro ${response.status}`;
-            throw new Error(errorMsg);
+
+            throw new Error(errorData.error || `Erro ${response.status}`);
           }
 
-          const data = await response.json();
-          console.log('✅ Upload bem-sucedido:', {
-            fileName: data.fileName,
-            url: data.url,
-            size: data.size
-          });
+          const data: { url: string } = await response.json();
+          markPreview(previewIndex, (preview) => ({ ...preview, uploading: false }));
           return data.url;
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-          console.error(`❌ Erro ao fazer upload de ${file.name}:`, errorMsg);
-          
-          // Atualizar preview com erro detalhado
-          setPreviews((prev) =>
-            prev.map((p, i) =>
-              i === value.length + index
-                ? { ...p, uploading: false, error: errorMsg }
-                : p
-            )
-          );
+          const message = getErrorMessage(error, IMAGE_FALLBACK_MESSAGE);
+          handlePreviewImageError(previewIndex, message);
           return null;
         }
-      });
+      };
 
-      const uploadedUrls = await Promise.all(uploadPromises);
-      const successfulUrls = uploadedUrls.filter(
-        (url): url is string => url !== null
+      const uploadResults = await Promise.all(
+        files.map((file, index) => uploadFile(file, basePreviewIndex + index))
       );
-      
+
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+
+      const successfulUrls = uploadResults.filter((url): url is string => Boolean(url));
       const failedCount = files.length - successfulUrls.length;
 
-      // Atualizar valor com URLs bem-sucedidas
       if (successfulUrls.length > 0) {
-        const newUrls = [...value, ...successfulUrls];
-        console.log('📸 Atualizando lista de imagens:', {
-          antes: value.length,
-          novas: successfulUrls.length,
-          depois: newUrls.length,
-          urls: newUrls
-        });
-        onChange(newUrls);
+        onChange([...value, ...successfulUrls]);
       }
 
-      // Remover TODOS os previews após processamento
       setPreviews([]);
 
-      // Notificar resultado
       if (failedCount > 0) {
-        const successMsg = successfulUrls.length > 0 
+        const successMsg = successfulUrls.length > 0
           ? `${successfulUrls.length} imagem(ns) enviada(s) com sucesso. `
           : '';
-        alert(`${successMsg}${failedCount} imagem(ns) falharam. Verifique os erros nas imagens marcadas em vermelho.`);
+        alert(
+          `${successMsg}${failedCount} imagem(ns) falharam. Verifique as mensagens de erro e tente novamente.`
+        );
       }
     } catch (error) {
-      console.error('Erro no upload:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-      alert(`Erro ao fazer upload das imagens: ${errorMsg}`);
+      const message = getErrorMessage(error, 'Erro ao fazer upload das imagens');
+      alert(message);
     } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setIsUploading(false);
+      resetFileInput();
     }
   };
 
-  const handleRemoveImage = (index: number) => {
-    const newValue = value.filter((_, i) => i !== index);
-    onChange(newValue);
+  const handleRemoveImage = (targetUrl: string) => {
+    onChange(value.filter((url) => url !== targetUrl));
+    setFailedPersistedImages((prev) => {
+      if (!prev[targetUrl]) {
+        return prev;
+      }
+      const updated = { ...prev };
+      delete updated[targetUrl];
+      return updated;
+    });
   };
 
   const handleRemovePreview = (index: number) => {
-    setPreviews((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => {
+      if (index < 0 || index >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed) {
+        URL.revokeObjectURL(removed.url);
+      }
+      return next;
+    });
   };
+
+  const renderFallback = (message: string, tone: 'default' | 'error' = 'default') => (
+    <div
+      className={`absolute inset-0 flex flex-col items-center justify-center ${
+        tone === 'error' ? 'text-red-500' : 'text-gray-400'
+      }`}
+    >
+      <ImageIcon className="h-8 w-8 mb-2" />
+      <p className="text-xs text-center px-2">{message}</p>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
-      {/* Label */}
       <div>
         <label className="text-sm font-medium">
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
         </label>
-        {helpText && (
-          <p className="text-xs text-muted-foreground mt-1">{helpText}</p>
-        )}
+        {helpText && <p className="text-xs text-muted-foreground mt-1">{helpText}</p>}
       </div>
 
-      {/* Input oculto */}
       <input
         ref={fileInputRef}
         type="file"
@@ -186,18 +237,21 @@ export function ImageUpload({
         multiple
         onChange={handleFileSelect}
         className="hidden"
-        disabled={uploading || (maxImages !== undefined && value.length >= maxImages)}
+        disabled={
+          isUploading || (maxImages !== undefined && totalSelected >= maxImages)
+        }
       />
 
-      {/* Botão de Upload */}
       <Button
         type="button"
         variant="outline"
         onClick={() => fileInputRef.current?.click()}
-        disabled={uploading || (maxImages !== undefined && value.length >= maxImages)}
+        disabled={
+          isUploading || (maxImages !== undefined && totalSelected >= maxImages)
+        }
         className="w-full"
       >
-        {uploading ? (
+        {isUploading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Enviando...
@@ -205,72 +259,58 @@ export function ImageUpload({
         ) : (
           <>
             <Upload className="mr-2 h-4 w-4" />
-            {maxImages 
-              ? `Selecionar Imagens (${value.length}/${maxImages})`
-              : `Selecionar Imagens (${value.length})`
-            }
+            {maxImages
+              ? `Selecionar Imagens (${totalSelected}/${maxImages})`
+              : `Selecionar Imagens (${totalSelected})`}
           </>
         )}
       </Button>
 
-      {/* Grid de Imagens - Mobile Optimized */}
       {(value.length > 0 || previews.length > 0) && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
-          {/* Imagens carregadas */}
-          {value.map((url, index) => {
-            console.log(`🖼️ Renderizando imagem ${index + 1}:`, url);
-            return (
-              <div key={`image-${index}`} className="relative group">
-                <div className="aspect-square rounded-lg border-2 border-gray-200 overflow-hidden bg-gray-50">
-                  <img
+          {value.map((url) => (
+            <div key={url} className="relative group">
+              <div className="aspect-square relative rounded-lg border-2 border-gray-200 overflow-hidden bg-gray-50">
+                {failedPersistedImages[url] ? (
+                  renderFallback(IMAGE_FALLBACK_MESSAGE, 'error')
+                ) : (
+                  <Image
                     src={url}
-                    alt={`Imagem ${index + 1}`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // Fallback se imagem não carregar
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      const parent = target.parentElement;
-                      if (parent) {
-                        parent.innerHTML = `
-                          <div class="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                            <svg class="h-12 w-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <p class="text-xs text-center">Erro ao carregar</p>
-                          </div>
-                        `;
-                      }
-                    }}
+                    alt="Imagem enviada"
+                    fill
+                    unoptimized
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                    className="object-cover"
+                    onError={() => markPersistedImageFailed(url)}
                   />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveImage(index)}
-                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-lg"
-                  title="Remover imagem"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                )}
               </div>
-            );
-          })}
+              <button
+                type="button"
+                onClick={() => handleRemoveImage(url)}
+                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-lg"
+                title="Remover imagem"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
 
-          {/* Previews em upload */}
           {previews.map((preview, index) => (
-            <div key={`preview-${index}`} className="relative group">
-              <div className="aspect-square rounded-lg border-2 border-dashed border-gray-300 overflow-hidden bg-gray-50">
+            <div key={preview.url} className="relative group">
+              <div className="aspect-square relative rounded-lg border-2 border-dashed border-gray-300 overflow-hidden bg-gray-50">
                 {preview.error ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-red-500">
-                    <ImageIcon className="h-8 w-8 mb-2" />
-                    <p className="text-xs text-center px-2">{preview.error}</p>
-                  </div>
+                  renderFallback(preview.error, 'error')
                 ) : (
                   <>
-                    <img
+                    <Image
                       src={preview.url}
                       alt={preview.name}
-                      className="w-full h-full object-cover opacity-50"
+                      fill
+                      unoptimized
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                      className="object-cover opacity-60"
+                      onError={() => handlePreviewImageError(index)}
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
@@ -283,7 +323,7 @@ export function ImageUpload({
                   type="button"
                   onClick={() => handleRemovePreview(index)}
                   className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1"
-                  title="Remover"
+                  title="Remover imagem com erro"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -293,7 +333,6 @@ export function ImageUpload({
         </div>
       )}
 
-      {/* Estado vazio */}
       {value.length === 0 && previews.length === 0 && (
         <div className="border-2 border-dashed rounded-lg p-8 text-center text-gray-400">
           <ImageIcon className="h-12 w-12 mx-auto mb-2" />
