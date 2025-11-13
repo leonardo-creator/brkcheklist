@@ -47,6 +47,7 @@ export function ImageUpload({
   const [previews, setPreviews] = useState<ImagePreview[]>([]);
   const [failedPersistedImages, setFailedPersistedImages] = useState<Record<string, boolean>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const totalSelected = value.length + previews.length;
@@ -155,9 +156,11 @@ export function ImageUpload({
         files.map((file, index) => uploadFile(file, basePreviewIndex + index))
       );
 
-      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      for (const url of objectUrls) {
+        URL.revokeObjectURL(url);
+      }
 
-      const successfulUrls = uploadResults.filter((url): url is string => Boolean(url));
+      const successfulUrls = uploadResults.filter((url): url is string => url !== null);
       const failedCount = files.length - successfulUrls.length;
 
       if (successfulUrls.length > 0) {
@@ -270,7 +273,12 @@ export function ImageUpload({
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
           {value.map((url) => (
             <div key={url} className="relative group">
-              <div className="aspect-square relative rounded-lg border-2 border-gray-200 overflow-hidden bg-gray-50">
+              <button
+                type="button"
+                className="aspect-square relative rounded-lg border-2 border-gray-200 overflow-hidden bg-gray-50 cursor-pointer hover:border-blue-400 transition-colors w-full"
+                onClick={() => setSelectedImage(url)}
+                aria-label="Visualizar imagem em tela cheia"
+              >
                 {failedPersistedImages[url] ? (
                   renderFallback(IMAGE_FALLBACK_MESSAGE, 'error')
                 ) : (
@@ -284,11 +292,14 @@ export function ImageUpload({
                     onError={() => markPersistedImageFailed(url)}
                   />
                 )}
-              </div>
+              </button>
               <button
                 type="button"
-                onClick={() => handleRemoveImage(url)}
-                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-lg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveImage(url);
+                }}
+                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow-lg z-10"
                 title="Remover imagem"
               >
                 <X className="h-4 w-4" />
@@ -338,6 +349,35 @@ export function ImageUpload({
           <ImageIcon className="h-12 w-12 mx-auto mb-2" />
           <p className="text-sm">Nenhuma imagem adicionada</p>
         </div>
+      )}
+
+      {/* Modal de visualização em tela cheia */}
+      {selectedImage && (
+        <button
+          type="button"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 p-4"
+          onClick={() => setSelectedImage(null)}
+          aria-label="Fechar visualização de imagem"
+        >
+          <button
+            type="button"
+            onClick={() => setSelectedImage(null)}
+            className="absolute top-4 right-4 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-full p-2 transition-colors z-10"
+            aria-label="Fechar"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <div className="relative max-w-[95vw] max-h-[95vh] w-full h-full flex items-center justify-center">
+            <Image
+              src={selectedImage}
+              alt="Visualização em tela cheia"
+              fill
+              unoptimized
+              className="object-contain pointer-events-none"
+              sizes="95vw"
+            />
+          </div>
+        </button>
       )}
     </div>
   );
