@@ -1,0 +1,29 @@
+name: Refresh question-codes Excel
+
+on:
+  schedule:
+    # daily at 03:00 UTC (adjust as needed)
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call refresh endpoint
+        env:
+          REFRESH_URL: ${{ secrets.REFRESH_URL }}
+          EXPORT_REFRESH_SECRET: ${{ secrets.EXPORT_REFRESH_SECRET }}
+        run: |
+          if [ -z "$REFRESH_URL" ] || [ -z "$EXPORT_REFRESH_SECRET" ]; then
+            echo "Missing REFRESH_URL or EXPORT_REFRESH_SECRET secrets. See repository settings." >&2
+            exit 1
+          fi
+
+          echo "Calling refresh endpoint: $REFRESH_URL"
+          HTTP_STATUS=$(curl -s -o /dev/stderr -w "%{http_code}" -X POST "$REFRESH_URL" -H "x-export-refresh-secret: $EXPORT_REFRESH_SECRET" -H "Content-Type: application/json" -d '{}')
+          echo "HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ge 400 ]; then
+            echo "Refresh failed with status $HTTP_STATUS" >&2
+            exit 1
+          fi

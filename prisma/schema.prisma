@@ -1,0 +1,361 @@
+// Prisma Schema for BRK Inspection System
+// Database: Neon PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ====================
+// USER & AUTHENTICATION
+// ====================
+
+enum UserRole {
+  PENDING // Aguardando aprovação do admin
+  USER    // Usuário aprovado (pode criar inspeções)
+  ADMIN   // Administrador (leonardo.juvencio018@gmail.com)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?   // Google profile image
+  password      String?   // Hashed password for email/password auth
+  role          UserRole  @default(PENDING)
+  
+  // OAuth
+  emailVerified DateTime?
+  
+  // Metadata
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+  
+  // Aprovação
+  approvedBy    String?   // Email do admin que aprovou
+  approvedAt    DateTime?
+  rejectedBy    String?
+  rejectedAt    DateTime?
+  rejectionReason String?
+  
+  // Relations
+  inspections   Inspection[]
+  logs          InspectionLog[]
+  accounts      Account[]
+  sessions      Session[]
+  resetTokens   PasswordResetToken[]
+  oneDriveToken OneDriveToken?
+  
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// OneDrive OAuth Tokens
+model OneDriveToken {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  accessToken  String   @db.Text
+  refreshToken String   @db.Text
+  expiresAt    DateTime // Quando o access token expira
+  scope        String?  // Scopes concedidos
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("onedrive_tokens")
+}
+
+// NextAuth tables
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ====================
+// INSPECTION SYSTEM
+// ====================
+
+enum InspectionStatus {
+  DRAFT       // Rascunho (pode editar)
+  SUBMITTED   // Enviado (finalizado)
+  ARCHIVED    // Arquivado
+}
+
+model Inspection {
+  id          String            @id @default(cuid())
+  
+  // Identificação
+  number      Int               @unique @default(autoincrement()) // Número sequencial
+  title       String?           // Título opcional
+  
+  // Status
+  status      InspectionStatus  @default(DRAFT)
+  
+  // Geolocalização
+  latitude    Float?
+  longitude   Float?
+  location    String?           // Endereço legível
+  
+  // Metadata
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  submittedAt DateTime?         // Quando foi finalizada
+  
+  // OneDrive
+  oneDriveFolderId   String?    // ID da pasta no OneDrive
+  oneDriveFolderPath String?    // Caminho completo
+  oneDriveShareLink  String?    // Link compartilhável
+  pdfOneDriveLink    String?    // Link do PDF gerado
+  
+  // Relações
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  responses   InspectionResponse[]
+  images      InspectionImage[]
+  logs        InspectionLog[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([number])
+  @@map("inspections")
+}
+
+// ====================
+// INSPECTION RESPONSES
+// ====================
+
+enum ResponseType {
+  YES
+  NO
+  NA  // Não aplicável
+  PARTIAL // Parcialmente (para pergunta 27)
+}
+
+model InspectionResponse {
+  id           String   @id @default(cuid())
+  
+  inspectionId String
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  
+  // Questão
+  sectionNumber Int      // 1 a 9
+  sectionTitle  String   // Ex: "PLANEJAMENTO E INTEGRAÇÃO DA EQUIPE"
+  questionNumber Int     // Número da questão dentro da seção
+  questionText  String   // Texto completo da pergunta
+  
+  // Resposta
+  response     ResponseType?
+  textValue    String?      // Para campos de texto livre
+  listValues   String[]     @default([]) // Para listas (ex: equipamentos)
+  
+  // Metadata
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([inspectionId, sectionNumber, questionNumber])
+  @@index([inspectionId])
+  @@map("inspection_responses")
+}
+
+// ====================
+// IMAGES & EVIDENCE
+// ====================
+
+enum ImageType {
+  PDST_FRONT        // PDST frente
+  PDST_BACK         // PDST verso
+  PT_FRONT          // Permissão de Trabalho frente
+  PT_BACK           // Permissão de Trabalho verso
+  GENERAL           // Fotos gerais da frente
+  EQUIPMENT         // Equipamentos
+  SIGNALING         // Sinalização
+  EXCAVATION        // Escavações
+  OTHER             // Outras evidências
+}
+
+model InspectionImage {
+  id           String    @id @default(cuid())
+  
+  inspectionId String
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  
+  // Classificação
+  type         ImageType @default(GENERAL)
+  sectionNumber Int?      // Seção relacionada
+  caption      String?   // Legenda/descrição
+  
+  // URL da imagem (pode ser OneDrive ou outro storage)
+  url          String    // URL pública ou caminho
+  
+  // OneDrive (campos opcionais para migração futura)
+  oneDriveFileId   String?
+  oneDriveFileName String?
+  oneDrivePath     String?
+  oneDriveShareLink String?
+  thumbnailUrl     String?
+  
+  // Metadata da imagem
+  originalName String?
+  mimeType     String?
+  sizeBytes    Int?
+  width        Int?
+  height       Int?
+  
+  // Metadata do upload
+  uploadedAt   DateTime  @default(now())
+  uploadedBy   String?   // User ID
+  
+  // Compressão
+  isCompressed Boolean   @default(false)
+  originalSizeBytes Int?
+  compressionRatio Float?
+  
+  @@index([inspectionId])
+  @@index([type])
+  @@map("inspection_images")
+}
+
+// ====================
+// AUDIT & LOGS
+// ====================
+
+enum LogAction {
+  CREATED
+  UPDATED
+  SUBMITTED
+  EDITED_AFTER_SUBMIT
+  STATUS_CHANGED
+  IMAGE_ADDED
+  IMAGE_DELETED
+  RESPONSE_CHANGED
+}
+
+model InspectionLog {
+  id           String    @id @default(cuid())
+  
+  inspectionId String
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  
+  // Ação
+  action       LogAction
+  description  String    // Descrição da mudança
+  
+  // Detalhes da mudança (JSON)
+  oldValue     String?   @db.Text
+  newValue     String?   @db.Text
+  metadata     Json?     // Informações extras
+  
+  // Autor
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  userEmail    String
+  userName     String?
+  
+  // Timestamp
+  createdAt    DateTime  @default(now())
+  
+  // IP e User Agent (segurança)
+  ipAddress    String?
+  userAgent    String?
+  
+  @@index([inspectionId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("inspection_logs")
+}
+
+// ====================
+// OFFLINE SYNC QUEUE
+// ====================
+
+enum SyncStatus {
+  PENDING
+  SYNCING
+  COMPLETED
+  FAILED
+}
+
+model OfflineQueue {
+  id           String     @id @default(cuid())
+  
+  userId       String
+  
+  // Dados para sincronizar
+  entityType   String     // "inspection", "response", "image"
+  entityId     String?    // ID local temporário
+  action       String     // "create", "update", "delete"
+  payload      Json       // Dados completos
+  
+  // Status
+  status       SyncStatus @default(PENDING)
+  attempts     Int        @default(0)
+  lastError    String?    @db.Text
+  
+  // Timestamps
+  createdAt    DateTime   @default(now())
+  syncedAt     DateTime?
+  
+  @@index([userId])
+  @@index([status])
+  @@map("offline_queue")
+}
