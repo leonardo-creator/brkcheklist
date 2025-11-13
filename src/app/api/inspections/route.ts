@@ -45,6 +45,8 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
     const sectionNumber = 1;
     const sectionTitle = 'PLANEJAMENTO E INTEGRAÇÃO DA EQUIPE';
 
+    console.log('🔍 Section1 raw data:', section);
+
     for (const [key, value] of Object.entries(section)) {
       if (key === 'q11_foto_pdst') {
         // Imagens são salvas separadamente
@@ -52,6 +54,8 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
       }
 
       const questionText = QUESTION_LABELS[key as keyof typeof QUESTION_LABELS];
+      console.log(`🔍 Processing ${key}:`, { value, questionText, hasLabel: !!questionText });
+      
       if (questionText && value) {
         responses.push({
           sectionNumber,
