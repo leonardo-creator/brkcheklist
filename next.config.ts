@@ -16,6 +16,18 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'graph.microsoft.com', // OneDrive thumbnails
       },
+      {
+        protocol: 'https',
+        hostname: '**.sharepoint.com', // OneDrive share links
+      },
+      {
+        protocol: 'https',
+        hostname: 'onedrive.live.com', // OneDrive public links
+      },
+      {
+        protocol: 'https',
+        hostname: '1drv.ms', // OneDrive short links
+      },
     ],
   },
 

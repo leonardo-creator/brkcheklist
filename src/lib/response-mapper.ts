@@ -38,6 +38,12 @@ export function mapResponsesToFormData(responses: Array<{
     return acc;
   }, {} as Record<string, string[]>);
 
+  // Debug: log imagens agrupadas
+  if (process.env.NODE_ENV === 'development') {
+    console.log('📸 Imagens agrupadas por tipo:', imagesByType);
+    console.log('📸 Total de imagens:', images.length);
+  }
+
   // ===========================
   // SEÇÃO 1: Planejamento
   // ===========================
