@@ -318,6 +318,16 @@ export async function PUT(
     // Mapear respostas
     const responsesData = mapFormDataToResponses(body);
 
+    // Deduplica respostas baseado na constraint única (inspectionId, sectionNumber, questionNumber)
+    const uniqueResponses = responsesData.reduce((acc, current) => {
+      const key = `${current.sectionNumber}-${current.questionNumber}`;
+      // Mantém apenas a última ocorrência de cada combinação seção+questão
+      acc.set(key, current);
+      return acc;
+    }, new Map<string, typeof responsesData[0]>());
+
+    const deduplicatedResponses = Array.from(uniqueResponses.values());
+
     // Atualizar inspeção em transação
     const inspection = await prisma.$transaction(async (tx) => {
       // 1. Atualizar inspeção
@@ -338,10 +348,10 @@ export async function PUT(
         where: { inspectionId: id },
       });
 
-      // 3. Criar novas respostas
-      if (responsesData.length > 0) {
+      // 3. Criar novas respostas (deduplicadas)
+      if (deduplicatedResponses.length > 0) {
         await tx.inspectionResponse.createMany({
-          data: responsesData.map((r) => ({
+          data: deduplicatedResponses.map((r) => ({
             inspectionId: id,
             sectionNumber: r.sectionNumber,
             sectionTitle: r.sectionTitle,
