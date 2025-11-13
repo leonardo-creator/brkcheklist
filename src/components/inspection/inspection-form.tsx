@@ -109,22 +109,7 @@ export function InspectionForm({
     }
   };
 
-  // Auto-save a cada 30 segundos
-  React.useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const formData = watch();
-        await saveDraft(formData);
-      } catch (error) {
-        // Silenciar erros de auto-save (será mostrado no save manual)
-        console.error('Auto-save falhou:', error);
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [watch]);
-
-  const saveDraft = async (data: Partial<InspectionFormData>) => {
+  const saveDraft = React.useCallback(async (data: Partial<InspectionFormData>) => {
     try {
       const response = await fetch(
         inspectionId ? `/api/inspections/${inspectionId}` : '/api/inspections',
@@ -158,7 +143,22 @@ export function InspectionForm({
       // Re-lançar erro para ser tratado pelo caller
       throw error;
     }
-  };
+  }, [inspectionId]);
+
+  // Auto-save a cada 30 segundos
+  React.useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const formData = watch();
+        await saveDraft(formData);
+      } catch (error) {
+        // Silenciar erros de auto-save (será mostrado no save manual)
+        console.error('Auto-save falhou:', error);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [watch, saveDraft]);
 
   const onSaveDraft = async () => {
     setIsSaving(true);

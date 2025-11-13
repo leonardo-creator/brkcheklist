@@ -1,5 +1,6 @@
 import { requireApprovedUser } from '@/lib/auth-utils';
 import { prisma } from '@/lib/prisma';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -10,7 +11,6 @@ import {
 } from '@/components/ui/card';
 import { OneDriveAlert } from '@/components/onedrive-alert';
 import { DeleteDraftButton } from '@/components/delete-draft-button';
-import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 
 export default async function DashboardPage({
@@ -73,12 +73,12 @@ export default async function DashboardPage({
               </p>
             </div>
             {/* Botão Sair */}
-            <a href="/api/auth/signout">
+            <Link href="/api/auth/signout">
               <Button variant="ghost" size="sm" className="ml-2">
                 <span className="hidden sm:inline">Sair</span>
                 <span className="sm:hidden">🚪</span>
               </Button>
-            </a>
+            </Link>
           </div>
         </div>
       </header>

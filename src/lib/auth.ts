@@ -24,7 +24,7 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL!;
 // Custom adapter para auto-aprovar admin
 const customAdapter = {
   ...PrismaAdapter(prisma),
-  async createUser(user: any) {
+  async createUser(user: { email?: string; name?: string; image?: string; emailVerified?: Date }) {
     const isAdmin = user.email === ADMIN_EMAIL;
     
     const newUser = await prisma.user.create({
@@ -44,7 +44,7 @@ const customAdapter = {
 };
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: customAdapter as any, // Type compatibility with NextAuth v5 beta
+  adapter: customAdapter,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,

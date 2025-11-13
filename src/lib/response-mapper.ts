@@ -1,4 +1,4 @@
-import { InspectionFormData } from './inspection-schema';
+import type { InspectionFormData } from './inspection-schema';
 
 /**
  * Converte respostas do banco de dados para o formato do formulário
@@ -22,7 +22,7 @@ export function mapResponsesToFormData(responses: Array<{
   sectionNumber?: number | null;
 }>): Partial<InspectionFormData> {
   
-  const formData: any = {};
+  const formData: InspectionFormData = {};
 
   // Agrupar respostas por seção
   const responsesBySection = responses.reduce((acc, r) => {

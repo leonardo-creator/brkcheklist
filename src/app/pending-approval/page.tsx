@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 
 export default async function PendingApprovalPage() {
   const session = await auth();
@@ -55,12 +56,12 @@ export default async function PendingApprovalPage() {
         </div>
 
         <div className="mt-6 text-center">
-          <a
+          <Link
             href="/api/auth/signout"
             className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
           >
             Sair
-          </a>
+          </Link>
         </div>
       </div>
     </div>

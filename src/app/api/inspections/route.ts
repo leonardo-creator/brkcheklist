@@ -28,7 +28,7 @@ function toResponseType(value: string): 'YES' | 'NO' | 'NA' | 'PARTIAL' {
 /**
  * Mapeia os dados do formulário para respostas do banco
  */
-function mapFormDataToResponses(formData: any) {
+function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) {
   const responses: Array<{
     sectionNumber: number;
     sectionTitle: string;
@@ -285,7 +285,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Filtros
-    const where: any = { userId: user.id };
+    const where: Record<string, unknown> = { userId: user.id };
     if (status) {
       where.status = status;
     }
@@ -318,10 +318,10 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro ao buscar inspeções:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao buscar inspeções' },
+      { error: error instanceof Error ? error.message : 'Erro ao buscar inspeções' },
       { status: 500 }
     );
   }
@@ -492,10 +492,10 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(inspectionWithRelations, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro ao criar inspeção:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao criar inspeção' },
+      { error: error instanceof Error ? error.message : 'Erro ao criar inspeção' },
       { status: 500 }
     );
   }

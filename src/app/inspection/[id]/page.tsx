@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { requireApprovedUser } from '@/lib/auth-utils';
 import { prisma } from '@/lib/prisma';
+import Image from 'next/image';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, MapPin, Calendar, User } from 'lucide-react';
@@ -206,10 +207,13 @@ export default async function InspectionDetailPage({ params }: PageProps) {
                 {inspection.images.map((image) => (
                   <div key={image.id} className="relative group">
                     <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
-                      <img
+                      <Image
                         src={image.url || image.oneDriveShareLink || ''}
                         alt={image.originalName || image.caption || 'Imagem'}
-                        className="w-full h-full object-cover"
+                        fill
+                        unoptimized
+                        sizes="(max-width: 768px) 50vw, (max-width: 1024px) 25vw, 25vw"
+                        className="object-cover"
                       />
                     </div>
                     <p className="text-xs text-gray-500 mt-1 truncate">

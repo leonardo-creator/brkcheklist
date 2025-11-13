@@ -95,8 +95,7 @@ export class OneDriveService {
   async uploadLargeFile(
     buffer: Buffer,
     fileName: string,
-    folderPath: string,
-    _mimeType: string
+    folderPath: string
   ): Promise<UploadResult> {
     const uploadPath = `/me/drive/root:/${folderPath}/${fileName}:/createUploadSession`;
 
@@ -172,7 +171,7 @@ export class OneDriveService {
   private async ensureRootFolderExists(): Promise<void> {
     try {
       await this.client.api(`/me/drive/root:/${this.rootFolder}`).get();
-    } catch (error) {
+    } catch {
       // Pasta não existe, criar
       await this.client.api('/me/drive/root/children').post({
         name: this.rootFolder,

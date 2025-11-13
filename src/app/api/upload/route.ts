@@ -113,10 +113,10 @@ export async function POST(request: NextRequest) {
       originalSize: file.size,
       fileId: uploadResult.id,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro no upload:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao fazer upload' },
+      { error: error instanceof Error ? error.message : 'Erro ao fazer upload' },
       { status: 500 }
     );
   }

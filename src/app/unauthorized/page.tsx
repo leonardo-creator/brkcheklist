@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 
 export default async function UnauthorizedPage() {
   const session = await auth();
@@ -39,18 +40,18 @@ export default async function UnauthorizedPage() {
         </div>
 
         <div className="mt-8 flex gap-4">
-          <a
+          <Link
             href="/dashboard"
             className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-center text-white hover:bg-blue-700"
           >
             Voltar ao Dashboard
-          </a>
-          <a
+          </Link>
+          <Link
             href="/api/auth/signout"
             className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-center text-gray-700 hover:bg-gray-50"
           >
             Sair
-          </a>
+          </Link>
         </div>
       </div>
     </div>

@@ -29,7 +29,7 @@ function toResponseType(value: string): 'YES' | 'NO' | 'NA' | 'PARTIAL' {
  * Mapeia os dados do formulário para respostas do banco
  * (mesma função usada no POST)
  */
-function mapFormDataToResponses(formData: any) {
+function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) {
   const responses: Array<{
     sectionNumber: number;
     sectionTitle: string;
@@ -453,10 +453,10 @@ export async function PUT(
     });
 
     return NextResponse.json(inspectionWithRelations, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro ao atualizar inspeção:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao atualizar inspeção' },
+      { error: error instanceof Error ? error.message : 'Erro ao atualizar inspeção' },
       { status: 500 }
     );
   }
@@ -522,10 +522,10 @@ export async function PATCH(
       id: updatedInspection.id,
       message: 'Rascunho salvo automaticamente',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro no auto-save:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao salvar rascunho' },
+      { error: error instanceof Error ? error.message : 'Erro ao salvar rascunho' },
       { status: 500 }
     );
   }
@@ -598,10 +598,10 @@ export async function DELETE(
       success: true,
       message: 'Rascunho excluído com sucesso',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro ao excluir inspeção:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao excluir inspeção' },
+      { error: error instanceof Error ? error.message : 'Erro ao excluir inspeção' },
       { status: 500 }
     );
   }
