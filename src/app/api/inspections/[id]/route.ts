@@ -536,7 +536,7 @@ export async function PATCH(
  * Exclui uma inspeção em rascunho
  */
 export async function DELETE(
-  _request: NextRequest,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
