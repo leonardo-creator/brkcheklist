@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'graph.microsoft.com', // OneDrive thumbnails
+        hostname: 'graph.microsoft.com', // OneDrive thumbnails & download
       },
       {
         protocol: 'https',
@@ -27,6 +27,14 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '1drv.ms', // OneDrive short links
+      },
+      {
+        protocol: 'https',
+        hostname: 'public.bn.files.1drv.com', // OneDrive direct download
+      },
+      {
+        protocol: 'https',
+        hostname: '**.blob.core.windows.net', // Azure Storage blobs
       },
     ],
   },

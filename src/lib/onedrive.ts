@@ -77,14 +77,14 @@ export class OneDriveService {
       .header('Content-Type', mimeType)
       .put(buffer);
 
-    // Gera link de compartilhamento
-    const shareLink = await this.createShareLink(response.id);
+    // Obtém link direto de download (melhor para <img>)
+    const downloadUrl = await this.getDirectDownloadLink(response.id);
 
     return {
       id: response.id,
       name: response.name,
       webUrl: response.webUrl,
-      shareLink: shareLink.link.webUrl,
+      shareLink: downloadUrl, // Usa download URL ao invés do link de visualização
       thumbnailUrl: response.thumbnails?.[0]?.large?.url,
     };
   }
@@ -125,13 +125,15 @@ export class OneDriveService {
 
       if (response.status === 200 || response.status === 201) {
         const result = await response.json();
-        const shareLink = await this.createShareLink(result.id);
+        
+        // Obtém link direto de download
+        const downloadUrl = await this.getDirectDownloadLink(result.id);
 
         return {
           id: result.id,
           name: result.name,
           webUrl: result.webUrl,
-          shareLink: shareLink.link.webUrl,
+          shareLink: downloadUrl,
         };
       }
 
@@ -143,12 +145,27 @@ export class OneDriveService {
 
   /**
    * Cria um link de compartilhamento público (somente leitura)
+   * Retorna link embed que pode ser usado diretamente em <img>
    */
   async createShareLink(fileId: string): Promise<{ link: { webUrl: string } }> {
-    return await this.client.api(`/me/drive/items/${fileId}/createLink`).post({
-      type: 'view',
+    const result = await this.client.api(`/me/drive/items/${fileId}/createLink`).post({
+      type: 'embed',
       scope: 'anonymous',
     });
+    
+    return result;
+  }
+
+  /**
+   * Obtém o link direto de download do arquivo
+   */
+  async getDirectDownloadLink(fileId: string): Promise<string> {
+    const file = await this.client
+      .api(`/me/drive/items/${fileId}`)
+      .select('@microsoft.graph.downloadUrl')
+      .get();
+    
+    return file['@microsoft.graph.downloadUrl'];
   }
 
   /**
