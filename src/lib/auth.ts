@@ -1,4 +1,5 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
+import { PrismaAdapter } from '@auth/prisma-adapter';
 import Google from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
@@ -20,87 +21,6 @@ declare module 'next-auth' {
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL!;
 
-// Custom adapter to handle user creation with admin auto-approval
-const customAdapter = {
-  async createUser(user: any) {
-    if (!user.email) {
-      throw new Error('Email is required to create a user');
-    }
-    
-    const isAdmin = user.email === ADMIN_EMAIL;
-    
-    const newUser = await prisma.user.create({
-      data: {
-        email: user.email,
-        name: user.name || null,
-        image: user.image || null,
-        emailVerified: user.emailVerified || null,
-        role: isAdmin ? 'ADMIN' : 'PENDING',
-        approvedBy: isAdmin ? 'SYSTEM' : null,
-        approvedAt: isAdmin ? new Date() : null,
-      },
-    });
-
-    return {
-      id: newUser.id,
-      email: newUser.email,
-      name: newUser.name,
-      image: newUser.image,
-      emailVerified: newUser.emailVerified,
-      role: newUser.role,
-    };
-  },
-
-  async getUser(id: string) {
-    const user = await prisma.user.findUnique({
-      where: { id },
-    });
-    if (!user) return null;
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      image: user.image,
-      emailVerified: user.emailVerified,
-      role: user.role,
-    };
-  },
-
-  async getUserByEmail(email: string) {
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-    if (!user) return null;
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      image: user.image,
-      emailVerified: user.emailVerified,
-      role: user.role,
-    };
-  },
-
-  async updateUser(user: any) {
-    const updatedUser = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        name: user.name,
-        image: user.image,
-        emailVerified: user.emailVerified,
-      },
-    });
-    return {
-      id: updatedUser.id,
-      email: updatedUser.email,
-      name: updatedUser.name,
-      image: updatedUser.image,
-      emailVerified: updatedUser.emailVerified,
-      role: updatedUser.role,
-    };
-  },
-};
-
 // Validate required environment variables
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error('NEXTAUTH_SECRET is not defined');
@@ -115,7 +35,7 @@ if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: customAdapter,
+  adapter: PrismaAdapter(prisma) as any,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -173,29 +93,65 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account }) {
       if (!user.email) return false;
 
-      // Para OAuth, permite o login e deixa o adapter criar o usuário
-      // Para Credentials, o usuário já existe
+      // Para OAuth (Google), verifica/cria usuário com role apropriado
+      if (account?.provider === 'google') {
+        try {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
+          });
+
+          if (!existingUser) {
+            // Novo usuário OAuth - define role baseado no email
+            const isAdmin = user.email === ADMIN_EMAIL;
+            await prisma.user.upsert({
+              where: { email: user.email },
+              update: { lastLoginAt: new Date() },
+              create: {
+                email: user.email,
+                name: user.name,
+                image: user.image,
+                role: isAdmin ? 'ADMIN' : 'PENDING',
+                approvedBy: isAdmin ? 'SYSTEM' : null,
+                approvedAt: isAdmin ? new Date() : null,
+                emailVerified: new Date(),
+              },
+            });
+          }
+        } catch (error) {
+          console.error('Error in signIn callback:', error);
+          return false;
+        }
+      }
+
       return true;
     },
 
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.role = user.role;
+    async jwt({ token, user, trigger }) {
+      // Sempre busca role atualizado do banco
+      if (token.email) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: token.email },
+            select: { id: true, role: true },
+          });
 
-        // Atualiza lastLoginAt no primeiro login
-        if (user.email) {
-          try {
-            await prisma.user.update({
-              where: { email: user.email },
-              data: { lastLoginAt: new Date() },
-            });
-          } catch (error) {
-            console.error('Error updating lastLoginAt:', error);
+          if (dbUser) {
+            token.id = dbUser.id;
+            token.role = dbUser.role;
+
+            // Atualiza lastLoginAt apenas no primeiro login
+            if (user || trigger === 'signIn') {
+              await prisma.user.update({
+                where: { email: token.email },
+                data: { lastLoginAt: new Date() },
+              });
+            }
           }
+        } catch (error) {
+          console.error('Error updating token:', error);
         }
       }
       return token;
