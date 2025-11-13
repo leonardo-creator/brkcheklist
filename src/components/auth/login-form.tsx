@@ -27,7 +27,7 @@ export function LoginForm() {
     try {
       setIsGoogleLoading(true);
       setError('');
-      await signIn('google', { callbackUrl: '/' });
+      await signIn('google', { callbackUrl: '/dashboard' });
     } catch (error) {
       console.error('Erro ao fazer login:', error);
       setError('Erro ao fazer login com Google');
@@ -59,7 +59,7 @@ export function LoginForm() {
       }
 
       // Redireciona após login bem-sucedido
-      router.push('/');
+      router.push('/dashboard');
       router.refresh();
     } catch (error) {
       console.error('Erro ao fazer login:', error);

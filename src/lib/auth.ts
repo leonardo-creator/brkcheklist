@@ -196,10 +196,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return session;
     },
 
-    async redirect({ baseUrl }) {
-      // Simplesmente retorna a URL base
-      // O redirecionamento baseado em role é feito nas páginas
-      return baseUrl;
+    async redirect({ url, baseUrl }) {
+      // Se a URL já contém um destino específico, use-a
+      if (url.startsWith(baseUrl)) {
+        return url;
+      }
+      // Caso contrário, redireciona para dashboard
+      return `${baseUrl}/dashboard`;
     },
   },
   pages: {
