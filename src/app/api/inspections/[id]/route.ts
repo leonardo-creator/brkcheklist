@@ -254,6 +254,79 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
 }
 
 /**
+ * GET /api/inspections/[id]
+ * Busca uma inspeção específica com todas as relações
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    // Buscar usuário
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    }
+
+    // Buscar inspeção com todas as relações
+    const inspection = await prisma.inspection.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        responses: {
+          orderBy: [
+            { sectionNumber: 'asc' },
+            { questionNumber: 'asc' },
+          ],
+        },
+        images: {
+          orderBy: { uploadedAt: 'asc' },
+        },
+        logs: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
+      },
+    });
+
+    if (!inspection) {
+      return NextResponse.json({ error: 'Inspeção não encontrada' }, { status: 404 });
+    }
+
+    // Verificar se é o dono ou admin
+    if (inspection.userId !== user.id && user.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Você não tem permissão para ver esta inspeção' },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json(inspection);
+  } catch (error: unknown) {
+    console.error('Erro ao buscar inspeção:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erro ao buscar inspeção' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * PUT /api/inspections/[id]
  * Atualiza uma inspeção existente (apenas DRAFT)
  */
@@ -322,6 +395,15 @@ export async function PUT(
     // Mapear respostas
     const responsesData = mapFormDataToResponses(body);
 
+    console.log('📊 === SALVANDO RESPOSTAS ===');
+    console.log('📊 Total responses before dedup:', responsesData.length);
+    console.log('📊 Respostas por seção:', 
+      Array.from(new Set(responsesData.map(r => r.sectionNumber)))
+        .sort()
+        .map(s => `Seção ${s}: ${responsesData.filter(r => r.sectionNumber === s).length}`)
+    );
+    console.log('📊 Sample responses:', responsesData.slice(0, 5));
+
     // Deduplica respostas baseado na constraint única (inspectionId, sectionNumber, questionNumber)
     const uniqueResponses = responsesData.reduce((acc, current) => {
       const key = `${current.sectionNumber}-${current.questionNumber}`;
@@ -331,8 +413,10 @@ export async function PUT(
     }, new Map<string, typeof responsesData[0]>());
 
     const deduplicatedResponses = Array.from(uniqueResponses.values());
+    
+    console.log('📊 Total responses after dedup:', deduplicatedResponses.length);
 
-    // Atualizar inspeção em transação
+    // Atualizar inspeção em transação (com timeout aumentado)
     const inspection = await prisma.$transaction(async (tx) => {
       // 1. Atualizar inspeção
       const updatedInspection = await tx.inspection.update({
@@ -347,33 +431,41 @@ export async function PUT(
         },
       });
 
-      // 2. Deletar respostas antigas
+      // 2. SUBSTITUIR TODAS as respostas (mais eficiente que UPSERT em loop)
+      // Deletar todas as respostas existentes
       await tx.inspectionResponse.deleteMany({
         where: { inspectionId: id },
       });
 
-      // 3. Criar novas respostas (deduplicadas)
+      console.log('📋 Deleted old responses');
+      console.log('📋 Creating new responses:', deduplicatedResponses.length);
+
+      // Criar todas as novas respostas em lote
       if (deduplicatedResponses.length > 0) {
         await tx.inspectionResponse.createMany({
-          data: deduplicatedResponses.map((r) => ({
+          data: deduplicatedResponses.map((response) => ({
             inspectionId: id,
-            sectionNumber: r.sectionNumber,
-            sectionTitle: r.sectionTitle,
-            questionNumber: r.questionNumber,
-            questionText: r.questionText,
-            response: r.response,
-            textValue: r.textValue,
-            listValues: r.listValues,
+            sectionNumber: response.sectionNumber,
+            sectionTitle: response.sectionTitle,
+            questionNumber: response.questionNumber,
+            questionText: response.questionText,
+            response: response.response,
+            textValue: response.textValue,
+            listValues: response.listValues,
           })),
         });
+        console.log(`✨ Created ${deduplicatedResponses.length} responses in batch`);
       }
 
-      // 4. Deletar imagens antigas
+      // 3. SUBSTITUIR TODAS as imagens (mais eficiente)
+      // Deletar todas as imagens existentes
       await tx.inspectionImage.deleteMany({
         where: { inspectionId: id },
       });
 
-      // 5. Criar novas imagens
+      console.log('🖼️ Deleted old images');
+
+      // Coletar novas imagens do formulário
       const imageUrls: Array<{
         url: string;
         caption?: string;
@@ -417,6 +509,9 @@ export async function PUT(
         }
       }
 
+      console.log('🖼️ New images to process:', imageUrls.length);
+
+      // Criar todas as novas imagens em lote
       if (imageUrls.length > 0) {
         await tx.inspectionImage.createMany({
           data: imageUrls.map((img) => ({
@@ -428,9 +523,10 @@ export async function PUT(
             uploadedBy: user.id,
           })),
         });
+        console.log(`✨ Created ${imageUrls.length} images in batch`);
       }
 
-      // 6. Log de atualização
+      // 4. Log de atualização
       await tx.inspectionLog.create({
         data: {
           inspectionId: id,
@@ -451,6 +547,9 @@ export async function PUT(
       });
 
       return updatedInspection;
+    }, {
+      maxWait: 10000, // Espera máxima de 10s para obter lock
+      timeout: 15000, // Timeout de 15s para executar a transação
     });
 
     // Retornar inspeção com respostas e imagens incluídas

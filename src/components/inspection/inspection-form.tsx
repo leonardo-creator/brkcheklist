@@ -8,7 +8,10 @@ import {
   Send,
   MapPin,
   Loader2,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import {
   useForm,
@@ -69,13 +72,19 @@ export function InspectionForm({
   const [isSaving, setIsSaving] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [locationLoading, setLocationLoading] = React.useState(false);
+  const [lastSaved, setLastSaved] = React.useState<Date | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = React.useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  const [answeredQuestions, setAnsweredQuestions] = React.useState(0);
+  const autoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const {
     control,
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
+    reset,
+    formState: { errors, isDirty },
   } = useForm<InspectionFormData>({
     resolver: zodResolver(InspectionFormSchema),
     defaultValues: initialData || {
@@ -93,6 +102,41 @@ export function InspectionForm({
     },
   });
 
+  // Carregar valores iniciais em modo edição
+  React.useEffect(() => {
+    if (initialData && mode === 'edit') {
+      reset(initialData);
+      setHasUnsavedChanges(false);
+    }
+  }, [initialData, mode, reset]);
+
+  // Contar questões respondidas
+  React.useEffect(() => {
+    const subscription = watch((formData) => {
+      let count = 0;
+      
+      // Contar todas as questões que têm resposta (YES, NO ou NA)
+      const allSections = [formData.section1, formData.section2, formData.section3, 
+                          formData.section4, formData.section5, formData.section6,
+                          formData.section7, formData.section8];
+      
+      allSections.forEach(section => {
+        if (section) {
+          Object.values(section).forEach(value => {
+            if (value === 'YES' || value === 'NO' || value === 'NA') {
+              count++;
+            }
+          });
+        }
+      });
+      
+      setAnsweredQuestions(count);
+      setHasUnsavedChanges(isDirty);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, [watch, isDirty]);
+
   // Capturar localização
   const handleGetLocation = async () => {
     setLocationLoading(true);
@@ -109,7 +153,7 @@ export function InspectionForm({
     }
   };
 
-  const saveDraft = React.useCallback(async (data: Partial<InspectionFormData>) => {
+  const saveDraft = React.useCallback(async (data: Partial<InspectionFormData>, isAutoSave = false) => {
     try {
       const response = await fetch(
         inspectionId ? `/api/inspections/${inspectionId}` : '/api/inspections',
@@ -137,48 +181,99 @@ export function InspectionForm({
         );
       }
 
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+      
+      if (!isAutoSave) {
+        toast.success('Rascunho salvo com sucesso!', {
+          description: `${answeredQuestions} questões respondidas`,
+          icon: <CheckCircle2 className="h-4 w-4" />,
+        });
+      }
+
       return result;
     } catch (error) {
       console.error('Erro ao salvar rascunho:', error);
-      // Re-lançar erro para ser tratado pelo caller
+      if (!isAutoSave) {
+        toast.error('Erro ao salvar rascunho', {
+          description: error instanceof Error ? error.message : 'Tente novamente',
+        });
+      }
       throw error;
     }
-  }, [inspectionId]);
+  }, [inspectionId, answeredQuestions]);
 
-  // Auto-save a cada 30 segundos
+  // Auto-save com debounce (30 segundos após última mudança)
   React.useEffect(() => {
-    const interval = setInterval(async () => {
+    if (!hasUnsavedChanges) return;
+    
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      setIsAutoSaving(true);
       try {
         const formData = watch();
-        await saveDraft(formData);
+        await saveDraft(formData, true);
       } catch (error) {
-        // Silenciar erros de auto-save (será mostrado no save manual)
         console.error('Auto-save falhou:', error);
+      } finally {
+        setIsAutoSaving(false);
       }
     }, 30000);
 
-    return () => clearInterval(interval);
-  }, [watch, saveDraft]);
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [hasUnsavedChanges, watch, saveDraft]);
+
+  // Confirmação ao sair com mudanças não salvas
+  React.useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const onSaveDraft = async () => {
     setIsSaving(true);
     try {
-      // Pegar dados atuais do formulário SEM validação
       const formData = watch();
-
-      await saveDraft(formData);
-      alert('Rascunho salvo com sucesso!');
+      await saveDraft(formData, false);
       router.push('/dashboard');
     } catch (error) {
       console.error('❌ Erro ao salvar rascunho:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Erro ao salvar rascunho';
-      alert(`Erro ao salvar: ${errorMsg}`);
     } finally {
       setIsSaving(false);
     }
   };
 
   const onSubmit = async (data: InspectionFormData) => {
+    // Verificar erros de validação
+    if (Object.keys(errors).length > 0) {
+      const errorCount = Object.keys(errors).length;
+      toast.error(`${errorCount} campo(s) obrigatório(s) não preenchido(s)`, {
+        description: 'Role para baixo para ver os erros destacados',
+        duration: 5000,
+      });
+      
+      // Scroll para o primeiro erro
+      const firstErrorField = Object.keys(errors)[0];
+      const errorElement = document.querySelector(`[name="${firstErrorField}"]`);
+      if (errorElement) {
+        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const url = mode === 'edit' && inspectionId
@@ -193,14 +288,29 @@ export function InspectionForm({
         body: JSON.stringify({ ...data, status: 'SUBMITTED' }),
       });
 
-      if (!response.ok) throw new Error('Falha ao enviar inspeção');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Falha ao enviar inspeção');
+      }
 
       const result = await response.json();
-      alert(mode === 'edit' ? 'Inspeção atualizada com sucesso!' : 'Inspeção enviada com sucesso!');
-      router.push(`/inspection/${result.id}`);
+      
+      setHasUnsavedChanges(false);
+      
+      toast.success(
+        mode === 'edit' ? 'Inspeção atualizada!' : 'Inspeção enviada!',
+        {
+          description: 'Redirecionando para visualização...',
+          icon: <CheckCircle2 className="h-4 w-4" />,
+        }
+      );
+      
+      setTimeout(() => router.push(`/inspection/${result.id}`), 500);
     } catch (error) {
       console.error('Erro ao enviar inspeção:', error);
-      alert('Erro ao enviar inspeção');
+      toast.error('Erro ao enviar inspeção', {
+        description: error instanceof Error ? error.message : 'Verifique os campos obrigatórios',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -274,18 +384,88 @@ export function InspectionForm({
     <div className="container mx-auto max-w-4xl py-8 px-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">
-            {mode === 'create' ? 'Nova Inspeção' : 'Editar Inspeção'}
-          </CardTitle>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-            <span>
-              Seção {currentSection + 1} de {SECTION_TITLES.length}:
-            </span>
-            <span className="font-medium">{SECTION_TITLES[currentSection]}</span>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <CardTitle className="text-2xl">
+                {mode === 'create' ? 'Nova Inspeção' : 'Editar Inspeção'}
+              </CardTitle>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                <span>
+                  Seção {currentSection + 1} de {SECTION_TITLES.length}:
+                </span>
+                <span className="font-medium">{SECTION_TITLES[currentSection]}</span>
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-2 text-sm">
+              {/* Progress Counter */}
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span className="font-medium">{answeredQuestions}</span>
+                <span>questões respondidas</span>
+              </div>
+              
+              {/* Auto-save Indicator */}
+              {(() => {
+                if (isAutoSaving) {
+                  return (
+                    <div className="flex items-center gap-2 text-blue-600">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span className="text-xs">Salvando...</span>
+                    </div>
+                  );
+                }
+                
+                if (lastSaved) {
+                  const timeDiff = Date.now() - lastSaved.getTime();
+                  const minutesAgo = Math.floor(timeDiff / 60000);
+                  const savedText = timeDiff < 60000 ? 'agora' : `há ${minutesAgo}min`;
+                  
+                  return (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span className="text-xs">Salvo {savedText}</span>
+                    </div>
+                  );
+                }
+                
+                if (hasUnsavedChanges) {
+                  return (
+                    <div className="flex items-center gap-2 text-orange-600">
+                      <Clock className="h-3 w-3" />
+                      <span className="text-xs">Não salvo</span>
+                    </div>
+                  );
+                }
+                
+                return null;
+              })()}
+            </div>
           </div>
         </CardHeader>
 
         <CardContent>
+          {/* Alerta de Erros de Validação */}
+          {Object.keys(errors).length > 0 && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 text-red-500">
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-red-800">
+                    {Object.keys(errors).length} campo(s) obrigatório(s) não preenchido(s)
+                  </h3>
+                  <p className="mt-1 text-sm text-red-700">
+                    Preencha todos os campos obrigatórios (marcados com *) antes de enviar a inspeção.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {/* Seção 0: Informações Gerais */}
             {currentSection === 0 && (
