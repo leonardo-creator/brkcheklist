@@ -123,21 +123,9 @@ export function ImageUpload({
           });
 
           if (!response.ok) {
-            const errorData: { error?: string; action?: string; connectUrl?: string } = await response
+            const errorData: { error?: string } = await response
               .json()
               .catch(() => ({}));
-
-            if (errorData.action === 'connect_onedrive') {
-              alert(
-                '⚠️ OneDrive não conectado!\n\n' +
-                  'Você precisa conectar sua conta Microsoft para fazer upload de imagens.\n\n' +
-                  'Clique em OK para conectar agora.'
-              );
-              const redirectUrl = errorData.connectUrl ?? '/api/onedrive/login';
-              globalThis.location.href = redirectUrl;
-              handlePreviewImageError(previewIndex, 'OneDrive não conectado');
-              return null;
-            }
 
             throw new Error(errorData.error || `Erro ${response.status}`);
           }

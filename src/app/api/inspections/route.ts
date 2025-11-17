@@ -6,12 +6,23 @@ import { InspectionFormSchema, QUESTION_LABELS } from '@/lib/inspection-schema';
 import { z } from 'zod';
 
 /**
- * Extrai o número da questão de uma chave (ex: "q1_equipe_integrada" -> 1)
+ * Extrai o número da questão de uma chave
+ * Trata questões condicionais: q14_1_inspecionados -> 141, q15_1_maquina -> 151
  */
 function extractQuestionNumber(key: string): number {
-  const regex = /^q(\d+)/;
-  const match = regex.exec(key);
-  return match?.[1] ? Number.parseInt(match[1], 10) : 0;
+  // Padrão para questões condicionais: q14_1_xxx -> 141, q15_2_xxx -> 152
+  const conditionalRegex = /^q(\d+)_(\d+)_/;
+  const conditionalMatch = conditionalRegex.exec(key);
+  if (conditionalMatch) {
+    const base = Number.parseInt(conditionalMatch[1], 10);
+    const sub = Number.parseInt(conditionalMatch[2], 10);
+    return base * 10 + sub; // 14_1 -> 141, 15_2 -> 152
+  }
+  
+  // Padrão normal: q14_usa_equipamentos -> 14
+  const normalRegex = /^q(\d+)/;
+  const normalMatch = normalRegex.exec(key);
+  return normalMatch?.[1] ? Number.parseInt(normalMatch[1], 10) : 0;
 }
 
 /**
@@ -98,28 +109,40 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
     const sectionNumber = 3;
     const sectionTitle = 'MÁQUINAS E EQUIPAMENTOS';
 
+    console.log('🔍 Section3 raw data:', section);
+
     for (const [key, value] of Object.entries(section)) {
+      // Ignorar valores vazios, null ou undefined
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
       const questionText = QUESTION_LABELS[key as keyof typeof QUESTION_LABELS];
-      if (questionText && value) {
-        // Se é lista de equipamentos, salva como textValue
+      console.log(`🔍 Processing Section3 ${key}:`, { value, questionText, hasLabel: !!questionText });
+      
+      if (questionText) {
         if (key === 'q14_equipamentos_lista') {
           responses.push({
             sectionNumber,
             sectionTitle,
             questionNumber: 14,
             questionText: 'Quais equipamentos?',
-            response: 'NA', // Placeholder para campo de texto
+            response: 'NA',
             textValue: String(value),
           });
         } else {
+          const qNumber = extractQuestionNumber(key);
           responses.push({
             sectionNumber,
             sectionTitle,
-            questionNumber: extractQuestionNumber(key),
+            questionNumber: qNumber,
             questionText,
             response: toResponseType(String(value)),
           });
+          console.log(`✅ Saved Section3 ${key} as questionNumber ${qNumber}`);
         }
+      } else {
+        console.warn(`⚠️ No label found for Section3 key: ${key}`);
       }
     }
   }
@@ -130,27 +153,40 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
     const sectionNumber = 4;
     const sectionTitle = 'MOVIMENTAÇÃO DE CARGAS';
 
+    console.log('🔍 Section4 raw data:', section);
+
     for (const [key, value] of Object.entries(section)) {
+      // Ignorar valores vazios, null ou undefined
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
       const questionText = QUESTION_LABELS[key as keyof typeof QUESTION_LABELS];
-      if (questionText && value) {
+      console.log(`🔍 Processing Section4 ${key}:`, { value, questionText, hasLabel: !!questionText });
+      
+      if (questionText) {
         if (key === 'q15_maquinas_lista') {
           responses.push({
             sectionNumber,
             sectionTitle,
             questionNumber: 15,
             questionText: 'Quais máquinas?',
-            response: 'NA', // Placeholder
+            response: 'NA',
             textValue: String(value),
           });
         } else {
+          const qNumber = extractQuestionNumber(key);
           responses.push({
             sectionNumber,
             sectionTitle,
-            questionNumber: extractQuestionNumber(key),
+            questionNumber: qNumber,
             questionText,
             response: toResponseType(String(value)),
           });
+          console.log(`✅ Saved Section4 ${key} as questionNumber ${qNumber}`);
         }
+      } else {
+        console.warn(`⚠️ No label found for Section4 key: ${key}`);
       }
     }
   }
@@ -201,16 +237,29 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
     const sectionNumber = 7;
     const sectionTitle = 'ESCAVAÇÕES';
 
+    console.log('🔍 Section7 raw data:', section);
+
     for (const [key, value] of Object.entries(section)) {
+      // Ignorar valores vazios, null ou undefined
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
       const questionText = QUESTION_LABELS[key as keyof typeof QUESTION_LABELS];
-      if (questionText && value) {
+      console.log(`🔍 Processing Section7 ${key}:`, { value, questionText, hasLabel: !!questionText });
+      
+      if (questionText) {
+        const qNumber = extractQuestionNumber(key);
         responses.push({
           sectionNumber,
           sectionTitle,
-          questionNumber: extractQuestionNumber(key),
+          questionNumber: qNumber,
           questionText,
           response: toResponseType(String(value)),
         });
+        console.log(`✅ Saved Section7 ${key} as questionNumber ${qNumber}`);
+      } else {
+        console.warn(`⚠️ No label found for Section7 key: ${key}`);
       }
     }
   }

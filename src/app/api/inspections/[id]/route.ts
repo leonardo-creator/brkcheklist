@@ -7,11 +7,22 @@ import { z } from 'zod';
 
 /**
  * Extrai o número da questão de uma chave
+ * Trata questões condicionais: q14_1_inspecionados -> 141, q15_1_maquina -> 151
  */
 function extractQuestionNumber(key: string): number {
-  const regex = /^q(\d+)/;
-  const match = regex.exec(key);
-  return match?.[1] ? Number.parseInt(match[1], 10) : 0;
+  // Padrão para questões condicionais: q14_1_xxx -> 141, q15_2_xxx -> 152
+  const conditionalRegex = /^q(\d+)_(\d+)_/;
+  const conditionalMatch = conditionalRegex.exec(key);
+  if (conditionalMatch) {
+    const base = Number.parseInt(conditionalMatch[1], 10);
+    const sub = Number.parseInt(conditionalMatch[2], 10);
+    return base * 10 + sub; // 14_1 -> 141, 15_2 -> 152
+  }
+  
+  // Padrão normal: q14_usa_equipamentos -> 14
+  const normalRegex = /^q(\d+)/;
+  const normalMatch = normalRegex.exec(key);
+  return normalMatch?.[1] ? Number.parseInt(normalMatch[1], 10) : 0;
 }
 
 /**
@@ -94,9 +105,18 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
     const sectionNumber = 3;
     const sectionTitle = 'MÁQUINAS E EQUIPAMENTOS';
 
+    console.log('🔍 Section3 raw data:', section);
+
     for (const [key, value] of Object.entries(section)) {
+      // Ignorar valores vazios, null ou undefined
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
       const questionText = QUESTION_LABELS[key as keyof typeof QUESTION_LABELS];
-      if (questionText && value) {
+      console.log(`🔍 Processing Section3 ${key}:`, { value, questionText, hasLabel: !!questionText });
+      
+      if (questionText) {
         if (key === 'q14_equipamentos_lista') {
           responses.push({
             sectionNumber,
@@ -107,14 +127,18 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
             textValue: String(value),
           });
         } else {
+          const qNumber = extractQuestionNumber(key);
           responses.push({
             sectionNumber,
             sectionTitle,
-            questionNumber: extractQuestionNumber(key),
+            questionNumber: qNumber,
             questionText,
             response: toResponseType(String(value)),
           });
+          console.log(`✅ Saved Section3 ${key} as questionNumber ${qNumber}`);
         }
+      } else {
+        console.warn(`⚠️ No label found for Section3 key: ${key}`);
       }
     }
   }
@@ -125,9 +149,18 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
     const sectionNumber = 4;
     const sectionTitle = 'MOVIMENTAÇÃO DE CARGAS';
 
+    console.log('🔍 Section4 raw data:', section);
+
     for (const [key, value] of Object.entries(section)) {
+      // Ignorar valores vazios, null ou undefined
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
       const questionText = QUESTION_LABELS[key as keyof typeof QUESTION_LABELS];
-      if (questionText && value) {
+      console.log(`🔍 Processing Section4 ${key}:`, { value, questionText, hasLabel: !!questionText });
+      
+      if (questionText) {
         if (key === 'q15_maquinas_lista') {
           responses.push({
             sectionNumber,
@@ -138,14 +171,18 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
             textValue: String(value),
           });
         } else {
+          const qNumber = extractQuestionNumber(key);
           responses.push({
             sectionNumber,
             sectionTitle,
-            questionNumber: extractQuestionNumber(key),
+            questionNumber: qNumber,
             questionText,
             response: toResponseType(String(value)),
           });
+          console.log(`✅ Saved Section4 ${key} as questionNumber ${qNumber}`);
         }
+      } else {
+        console.warn(`⚠️ No label found for Section4 key: ${key}`);
       }
     }
   }
@@ -196,16 +233,29 @@ function mapFormDataToResponses(formData: z.infer<typeof InspectionFormSchema>) 
     const sectionNumber = 7;
     const sectionTitle = 'ESCAVAÇÕES';
 
+    console.log('🔍 Section7 raw data:', section);
+
     for (const [key, value] of Object.entries(section)) {
+      // Ignorar valores vazios, null ou undefined
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
       const questionText = QUESTION_LABELS[key as keyof typeof QUESTION_LABELS];
-      if (questionText && value) {
+      console.log(`🔍 Processing Section7 ${key}:`, { value, questionText, hasLabel: !!questionText });
+      
+      if (questionText) {
+        const qNumber = extractQuestionNumber(key);
         responses.push({
           sectionNumber,
           sectionTitle,
-          questionNumber: extractQuestionNumber(key),
+          questionNumber: qNumber,
           questionText,
           response: toResponseType(String(value)),
         });
+        console.log(`✅ Saved Section7 ${key} as questionNumber ${qNumber}`);
+      } else {
+        console.warn(`⚠️ No label found for Section7 key: ${key}`);
       }
     }
   }
@@ -361,16 +411,17 @@ export async function PUT(
       return NextResponse.json({ error: 'Inspeção não encontrada' }, { status: 404 });
     }
 
-    // Verificar se é o dono
-    if (existingInspection.userId !== user.id) {
+    // Verificar se é o dono ou admin
+    if (existingInspection.userId !== user.id && user.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Você não tem permissão para editar esta inspeção' },
         { status: 403 }
       );
     }
 
-    // Apenas DRAFT pode ser editado
-    if (existingInspection.status !== 'DRAFT') {
+    // Apenas DRAFT pode ser editado por usuários normais
+    // Admins podem editar qualquer inspeção (DRAFT ou SUBMITTED)
+    if (existingInspection.status !== 'DRAFT' && user.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Apenas rascunhos podem ser editados' },
         { status: 400 }
@@ -431,39 +482,88 @@ export async function PUT(
         },
       });
 
-      // 2. SUBSTITUIR TODAS as respostas (mais eficiente que UPSERT em loop)
-      // Deletar todas as respostas existentes
-      await tx.inspectionResponse.deleteMany({
+      // 2. UPSERT de respostas (preserva dados parciais)
+      // Buscar respostas existentes
+      const existingResponses = await tx.inspectionResponse.findMany({
         where: { inspectionId: id },
+        select: { id: true, sectionNumber: true, questionNumber: true },
       });
 
-      console.log('📋 Deleted old responses');
-      console.log('📋 Creating new responses:', deduplicatedResponses.length);
+      // Criar map para lookup rápido
+      const existingMap = new Map(
+        existingResponses.map((r) => [`${r.sectionNumber}-${r.questionNumber}`, r.id])
+      );
 
-      // Criar todas as novas respostas em lote
-      if (deduplicatedResponses.length > 0) {
-        await tx.inspectionResponse.createMany({
-          data: deduplicatedResponses.map((response) => ({
-            inspectionId: id,
-            sectionNumber: response.sectionNumber,
-            sectionTitle: response.sectionTitle,
-            questionNumber: response.questionNumber,
-            questionText: response.questionText,
-            response: response.response,
-            textValue: response.textValue,
-            listValues: response.listValues,
-          })),
-        });
-        console.log(`✨ Created ${deduplicatedResponses.length} responses in batch`);
+      console.log('📋 Existing responses:', existingResponses.length);
+      console.log('📋 New responses to process:', deduplicatedResponses.length);
+
+      // Para cada resposta: ATUALIZAR se existe, CRIAR se não existe
+      let updatedCount = 0;
+      let createdCount = 0;
+
+      for (const response of deduplicatedResponses) {
+        const key = `${response.sectionNumber}-${response.questionNumber}`;
+        const existingId = existingMap.get(key);
+
+        if (existingId) {
+          // ✏️ ATUALIZAR resposta existente
+          await tx.inspectionResponse.update({
+            where: { id: existingId },
+            data: {
+              sectionTitle: response.sectionTitle,
+              questionText: response.questionText,
+              response: response.response,
+              textValue: response.textValue,
+              listValues: response.listValues,
+            },
+          });
+          updatedCount++;
+        } else {
+          // ✨ CRIAR nova resposta
+          await tx.inspectionResponse.create({
+            data: {
+              inspectionId: id,
+              sectionNumber: response.sectionNumber,
+              sectionTitle: response.sectionTitle,
+              questionNumber: response.questionNumber,
+              questionText: response.questionText,
+              response: response.response,
+              textValue: response.textValue,
+              listValues: response.listValues,
+            },
+          });
+          createdCount++;
+        }
       }
 
-      // 3. SUBSTITUIR TODAS as imagens (mais eficiente)
-      // Deletar todas as imagens existentes
-      await tx.inspectionImage.deleteMany({
+      console.log(`✨ Updated ${updatedCount} responses, created ${createdCount} new responses`);
+
+      // Deletar APENAS respostas que não estão mais no formulário
+      const newKeys = new Set(
+        deduplicatedResponses.map((r) => `${r.sectionNumber}-${r.questionNumber}`)
+      );
+      const responsesToDelete = existingResponses.filter(
+        (r) => !newKeys.has(`${r.sectionNumber}-${r.questionNumber}`)
+      );
+
+      if (responsesToDelete.length > 0) {
+        await tx.inspectionResponse.deleteMany({
+          where: { id: { in: responsesToDelete.map((r) => r.id) } },
+        });
+        console.log(`🗑️ Deleted ${responsesToDelete.length} removed responses`);
+      }
+
+      // 3. UPSERT de imagens (preserva imagens existentes)
+      // Buscar imagens existentes
+      const existingImages = await tx.inspectionImage.findMany({
         where: { inspectionId: id },
+        select: { id: true, url: true, type: true, sectionNumber: true },
       });
 
-      console.log('🖼️ Deleted old images');
+      // Criar set de URLs existentes para lookup rápido
+      const existingImageUrls = new Set(existingImages.map((img) => img.url));
+
+      console.log('🖼️ Existing images:', existingImages.length);
 
       // Coletar novas imagens do formulário
       const imageUrls: Array<{
@@ -511,10 +611,13 @@ export async function PUT(
 
       console.log('🖼️ New images to process:', imageUrls.length);
 
-      // Criar todas as novas imagens em lote
-      if (imageUrls.length > 0) {
+      // Adicionar APENAS novas imagens (não duplicar)
+      const newImages = imageUrls.filter((img) => !existingImageUrls.has(img.url));
+      let imagesCreated = 0;
+
+      if (newImages.length > 0) {
         await tx.inspectionImage.createMany({
-          data: imageUrls.map((img) => ({
+          data: newImages.map((img) => ({
             inspectionId: id,
             url: img.url,
             caption: img.caption,
@@ -523,7 +626,19 @@ export async function PUT(
             uploadedBy: user.id,
           })),
         });
-        console.log(`✨ Created ${imageUrls.length} images in batch`);
+        imagesCreated = newImages.length;
+        console.log(`✨ Created ${imagesCreated} new images`);
+      }
+
+      // Deletar APENAS imagens removidas do formulário
+      const newImageUrls = new Set(imageUrls.map((img) => img.url));
+      const imagesToDelete = existingImages.filter((img) => !newImageUrls.has(img.url));
+
+      if (imagesToDelete.length > 0) {
+        await tx.inspectionImage.deleteMany({
+          where: { id: { in: imagesToDelete.map((img) => img.id) } },
+        });
+        console.log(`🗑️ Deleted ${imagesToDelete.length} removed images`);
       }
 
       // 4. Log de atualização
@@ -610,7 +725,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Inspeção não encontrada' }, { status: 404 });
     }
 
-    if (existingInspection.userId !== user.id) {
+    // Verificar se é o dono ou admin
+    if (existingInspection.userId !== user.id && user.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Sem permissão para editar esta inspeção' },
         { status: 403 }

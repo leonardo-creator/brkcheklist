@@ -30,13 +30,14 @@ export default async function EditInspectionPage({ params }: PageProps) {
     notFound();
   }
 
-  // Verificar se o usuário é dono da inspeção
-  if (inspection.userId !== session.user.id) {
+  // Verificar se o usuário é dono da inspeção ou admin
+  if (inspection.userId !== session.user.id && session.user.role !== 'ADMIN') {
     redirect('/dashboard');
   }
 
-  // Apenas rascunhos podem ser editados
-  if (inspection.status !== 'DRAFT') {
+  // Apenas rascunhos podem ser editados por usuários normais
+  // Admins podem editar qualquer inspeção (DRAFT ou SUBMITTED)
+  if (inspection.status !== 'DRAFT' && session.user.role !== 'ADMIN') {
     redirect(`/inspection/${id}`);
   }
 

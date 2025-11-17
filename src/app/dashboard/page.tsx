@@ -9,25 +9,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { OneDriveAlert } from '@/components/onedrive-alert';
 import { DeleteDraftButton } from '@/components/delete-draft-button';
 import { formatDateTime } from '@/lib/utils';
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ onedrive_connected?: string; onedrive_error?: string }>;
-}) {
+export default async function DashboardPage() {
   const session = await requireApprovedUser();
-  const params = await searchParams;
-
-  // Verificar se OneDrive está conectado
-  const oneDriveToken = await prisma.oneDriveToken.findUnique({
-    where: { userId: session.user.id },
-    select: { expiresAt: true, updatedAt: true },
-  });
-
-  const isOneDriveConnected = oneDriveToken !== null;
 
   // Busca as últimas 5 inspeções do usuário
   const inspections = await prisma.inspection.findMany({
@@ -121,27 +107,6 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
         )}
-
-        {/* OneDrive Status Alert */}
-        {params.onedrive_connected === 'true' && (
-          <div className="mb-4 rounded-lg bg-green-50 p-4 text-green-800 border border-green-200">
-            <p className="font-medium">✅ OneDrive conectado com sucesso!</p>
-            <p className="text-sm mt-1">
-              Agora você pode fazer upload de imagens para suas inspeções.
-            </p>
-          </div>
-        )}
-        {params.onedrive_error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-4 text-red-800 border border-red-200">
-            <p className="font-medium">❌ Erro ao conectar OneDrive</p>
-            <p className="text-sm mt-1">
-              Erro: {decodeURIComponent(params.onedrive_error)}
-            </p>
-          </div>
-        )}
-
-        {/* OneDrive Connection Card */}
-        <OneDriveAlert isConnected={isOneDriveConnected} />
 
         {/* Stats Cards - Mobile Optimized */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">

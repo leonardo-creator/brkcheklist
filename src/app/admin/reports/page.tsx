@@ -65,8 +65,6 @@ export default async function AdminReportsPage() {
     _count: true,
   });
 
-  // Estatísticas de OneDrive
-  const usersWithOneDrive = await prisma.oneDriveToken.count();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -100,9 +98,6 @@ export default async function AdminReportsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold text-blue-600">{totalUsers}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {usersWithOneDrive} conectados ao OneDrive
-              </p>
             </CardContent>
           </Card>
 
@@ -133,7 +128,7 @@ export default async function AdminReportsPage() {
                 {totalImages}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Armazenadas no OneDrive
+                Imagens armazenadas
               </p>
             </CardContent>
           </Card>
@@ -244,24 +239,6 @@ export default async function AdminReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      Taxa de Integração OneDrive
-                    </p>
-                    <p className="text-3xl font-bold text-green-600 mt-2">
-                      {totalUsers > 0
-                        ? `${((usersWithOneDrive / totalUsers) * 100).toFixed(1)}%`
-                        : '0%'}
-                    </p>
-                  </div>
-                  <div className="text-5xl">☁️</div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  {usersWithOneDrive} de {totalUsers} usuários conectados
-                </p>
-              </div>
 
               <div className="p-4 border rounded-lg">
                 <div className="flex items-center justify-between">

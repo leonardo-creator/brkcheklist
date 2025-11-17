@@ -14,26 +14,6 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'graph.microsoft.com', // OneDrive thumbnails & download
-      },
-      {
-        protocol: 'https',
-        hostname: '**.sharepoint.com', // OneDrive share links
-      },
-      {
-        protocol: 'https',
-        hostname: 'onedrive.live.com', // OneDrive public links
-      },
-      {
-        protocol: 'https',
-        hostname: '1drv.ms', // OneDrive short links
-      },
-      {
-        protocol: 'https',
-        hostname: 'public.bn.files.1drv.com', // OneDrive direct download
-      },
-      {
-        protocol: 'https',
         hostname: '**.blob.core.windows.net', // Azure Storage blobs
       },
     ],
@@ -44,13 +24,32 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       net: false,
       tls: false,
     };
+
+    // Mark optional storage dependencies as externals for server builds
+    // This prevents webpack from trying to bundle them, allowing dynamic imports at runtime
+    if (isServer) {
+      const originalExternals = config.externals || [];
+      config.externals = [
+        ...(Array.isArray(originalExternals) ? originalExternals : [originalExternals]),
+        ({ request }, callback) => {
+          // Check if the request is one of our optional dependencies
+          if (['aws-sdk', '@azure/storage-blob', 'form-data'].includes(request)) {
+            // Mark as external - webpack won't try to bundle it
+            // The dynamic import in the code will handle loading it at runtime
+            return callback(undefined, `commonjs ${request}`);
+          }
+          callback();
+        },
+      ];
+    }
+
     return config;
   },
 };

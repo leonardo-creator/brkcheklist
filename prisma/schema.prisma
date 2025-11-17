@@ -49,7 +49,6 @@ model User {
   accounts      Account[]
   sessions      Session[]
   resetTokens   PasswordResetToken[]
-  oneDriveToken OneDriveToken?
   
   @@index([email])
   @@index([role])
@@ -68,25 +67,6 @@ model PasswordResetToken {
   @@index([token])
   @@index([userId])
   @@map("password_reset_tokens")
-}
-
-// OneDrive OAuth Tokens
-model OneDriveToken {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  accessToken  String   @db.Text
-  refreshToken String   @db.Text
-  expiresAt    DateTime // Quando o access token expira
-  scope        String?  // Scopes concedidos
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
-  @@index([userId])
-  @@index([expiresAt])
-  @@map("onedrive_tokens")
 }
 
 // NextAuth tables
@@ -158,12 +138,6 @@ model Inspection {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   submittedAt DateTime?         // Quando foi finalizada
-  
-  // OneDrive
-  oneDriveFolderId   String?    // ID da pasta no OneDrive
-  oneDriveFolderPath String?    // Caminho completo
-  oneDriveShareLink  String?    // Link compartilhável
-  pdfOneDriveLink    String?    // Link do PDF gerado
   
   // Relações
   userId      String
@@ -244,15 +218,9 @@ model InspectionImage {
   sectionNumber Int?      // Seção relacionada
   caption      String?   // Legenda/descrição
   
-  // URL da imagem (pode ser OneDrive ou outro storage)
+  // URL da imagem (storage configurado via .env)
   url          String    // URL pública ou caminho
-  
-  // OneDrive (campos opcionais para migração futura)
-  oneDriveFileId   String?
-  oneDriveFileName String?
-  oneDrivePath     String?
-  oneDriveShareLink String?
-  thumbnailUrl     String?
+  thumbnailUrl String?   // URL do thumbnail (opcional)
   
   // Metadata da imagem
   originalName String?

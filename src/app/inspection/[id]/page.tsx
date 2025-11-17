@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { requireApprovedUser } from '@/lib/auth-utils';
 import { prisma } from '@/lib/prisma';
 import Image from 'next/image';
@@ -14,7 +14,7 @@ interface PageProps {
 }
 
 export default async function InspectionDetailPage({ params }: PageProps) {
-  await requireApprovedUser();
+  const session = await requireApprovedUser();
   const { id } = await params;
 
   const inspection = await prisma.inspection.findUnique({
@@ -37,6 +37,11 @@ export default async function InspectionDetailPage({ params }: PageProps) {
 
   if (!inspection) {
     notFound();
+  }
+
+  // Verificar se o usuário é o dono ou admin
+  if (inspection.userId !== session.user.id && session.user.role !== 'ADMIN') {
+    redirect('/dashboard');
   }
 
   const statusColors = {
@@ -64,9 +69,13 @@ export default async function InspectionDetailPage({ params }: PageProps) {
           </Link>
 
           <div className="flex gap-2">
-            {inspection.status === 'DRAFT' && (
+            {(inspection.status === 'DRAFT' || session.user.role === 'ADMIN') && (
               <Link href={`/inspection/${inspection.id}/edit`}>
-                <Button variant="outline">Editar</Button>
+                <Button variant="outline">
+                  {session.user.role === 'ADMIN' && inspection.status === 'SUBMITTED' 
+                    ? 'Editar (Admin)' 
+                    : 'Editar'}
+                </Button>
               </Link>
             )}
           </div>
@@ -151,46 +160,66 @@ export default async function InspectionDetailPage({ params }: PageProps) {
                 Nenhuma resposta registrada ainda.
               </p>
             ) : (
-              <div className="space-y-4">
-                {inspection.responses.map((response) => (
-                  <div
-                    key={response.id}
-                    className="border-b pb-4 last:border-b-0"
-                  >
-                    <p className="font-medium text-sm">
-                      Seção {response.sectionNumber}: {response.sectionTitle}
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {response.questionNumber}. {response.questionText}
-                    </p>
-                    <p className="mt-2">
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-sm font-medium ${
-                          response.response === 'YES'
-                            ? 'bg-green-100 text-green-800'
-                            : response.response === 'NO'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {response.response === 'YES'
-                          ? 'Sim'
-                          : response.response === 'NO'
-                          ? 'Não'
-                          : response.response === 'NA'
-                          ? 'N/A'
-                          : response.response === 'PARTIAL'
-                          ? 'Parcialmente'
-                          : response.textValue}
-                      </span>
-                    </p>
-                    {response.textValue && (
-                      <p className="mt-2 text-sm text-gray-700 bg-gray-50 p-3 rounded">
-                        {response.textValue}
-                      </p>
-                    )}
-                  </div>
-                ))}
+              <div className="space-y-6">
+                {Array.from(
+                  new Map(
+                    inspection.responses.map((r) => [
+                      r.sectionNumber,
+                      { sectionNumber: r.sectionNumber, sectionTitle: r.sectionTitle },
+                    ])
+                  ).values()
+                )
+                  .sort((a, b) => a.sectionNumber - b.sectionNumber)
+                  .map((section) => {
+                    const sectionResponses = inspection.responses.filter(
+                      (r) => r.sectionNumber === section.sectionNumber
+                    );
+                    return (
+                      <div key={section.sectionNumber} className="border-b pb-6 last:border-b-0">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                          Seção {section.sectionNumber}: {section.sectionTitle}
+                        </h3>
+                        <div className="space-y-3">
+                          {sectionResponses.map((response) => (
+                            <div
+                              key={response.id}
+                              className="bg-gray-50 p-3 rounded-lg"
+                            >
+                              <p className="text-sm font-medium text-gray-700 mb-1">
+                                {response.questionNumber}. {response.questionText}
+                              </p>
+                              <p className="mt-2">
+                                <span
+                                  className={`inline-flex px-2 py-1 rounded text-sm font-medium ${
+                                    response.response === 'YES'
+                                      ? 'bg-green-100 text-green-800'
+                                      : response.response === 'NO'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-800'
+                                  }`}
+                                >
+                                  {response.response === 'YES'
+                                    ? 'Sim'
+                                    : response.response === 'NO'
+                                    ? 'Não'
+                                    : response.response === 'NA'
+                                    ? 'N/A'
+                                    : response.response === 'PARTIAL'
+                                    ? 'Parcialmente'
+                                    : response.textValue}
+                                </span>
+                              </p>
+                              {response.textValue && response.response !== 'NA' && (
+                                <p className="mt-2 text-sm text-gray-700 bg-white p-2 rounded border">
+                                  {response.textValue}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </CardContent>
@@ -208,7 +237,7 @@ export default async function InspectionDetailPage({ params }: PageProps) {
                   <div key={image.id} className="relative group">
                     <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
                       <Image
-                        src={image.url || image.oneDriveShareLink || ''}
+                        src={image.url || ''}
                         alt={image.originalName || image.caption || 'Imagem'}
                         fill
                         unoptimized

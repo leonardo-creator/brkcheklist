@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { OneDriveService, getOneDriveAccessToken } from '@/lib/onedrive';
+import { createStorageService } from '@/lib/storage';
 import sharp from 'sharp';
 
 export const runtime = 'nodejs';
@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 /**
  * POST /api/upload
- * Upload de imagem para OneDrive e retorno do link público
+ * Upload de imagem para storage configurado no .env e retorno do link público
  */
 export async function POST(request: NextRequest) {
   try {
@@ -64,53 +64,27 @@ export async function POST(request: NextRequest) {
     const randomString = Math.random().toString(36).substring(2, 8);
     const fileName = `IMG_${timestamp}_${randomString}.jpg`;
 
-    // Obter access token do OneDrive (usando OAuth do usuário)
-    let accessToken: string;
-    try {
-      accessToken = await getOneDriveAccessToken(session.user.id);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Erro ao obter token do OneDrive';
-      return NextResponse.json(
-        { 
-          error: errorMsg,
-          action: 'connect_onedrive',
-          connectUrl: '/api/onedrive/login'
-        },
-        { status: 403 }
-      );
-    }
-
-    const oneDriveService = new OneDriveService({ accessToken });
+    // Criar serviço de storage baseado nas configurações do .env
+    const storageService = createStorageService();
 
     // Criar pasta temporária (será movida quando a inspeção for salva)
     const userId = session.user.email?.split('@')[0] || 'temp';
-    const folderPath = `BRK_Inspecoes/temp/${userId}`;
+    const folderPath = `temp/${userId}`;
 
     // Upload do arquivo
-    let uploadResult;
-    if (optimizedBuffer.length > 4 * 1024 * 1024) {
-      // Se > 4MB, usar upload chunked
-      uploadResult = await oneDriveService.uploadLargeFile(
-        optimizedBuffer,
-        fileName,
-        folderPath
-      );
-    } else {
-      // Upload simples
-      uploadResult = await oneDriveService.uploadImage(
-        optimizedBuffer,
-        fileName,
-        folderPath,
-        'image/jpeg'
-      );
-    }
+    const uploadResult = await storageService.uploadFile(
+      optimizedBuffer,
+      fileName,
+      folderPath,
+      'image/jpeg'
+    );
 
     return NextResponse.json({
-      url: uploadResult.shareLink || uploadResult.webUrl,
-      fileName: fileName,
-      size: optimizedBuffer.length,
+      url: uploadResult.url,
+      fileName: uploadResult.fileName,
+      size: uploadResult.size || optimizedBuffer.length,
       originalSize: file.size,
-      fileId: uploadResult.id,
+      fileId: uploadResult.fileId || fileName,
     });
   } catch (error: unknown) {
     console.error('Erro no upload:', error);
